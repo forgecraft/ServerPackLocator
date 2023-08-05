@@ -238,6 +238,10 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         return validator.validate(digest(target), signature);
     }
 
+    private static boolean validate(final byte[] target, final SignatureValidator validator, final byte[] signature) {
+        return validator.validate(digest(target), signature);
+    }
+
     @Override
     public void onClientConnectionCreation(final URLConnection connection)
     {
@@ -366,7 +370,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         final boolean challengeValidationRequired;
         final byte[] challengeSignature;
-        final String challenge;
+        final byte[] challenge;
         if (!Objects.equals(msg.uri(), "/authenticate")) {
             final String challengeSignatureHeader = headers.get("ChallengeSignature");
             if (challengeSignatureHeader == null) {
@@ -381,16 +385,15 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 return false;
             }
 
-            final byte[] challengeChannelPayload = currentChallenges.get(sessionId);
-            if (challengeChannelPayload == null) {
+            challenge = currentChallenges.get(sessionId);
+            if (challenge == null) {
                 LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: " + new String(challengeSignature, StandardCharsets.UTF_8));
                 return false;
             }
-            challenge = new String(Base64.getDecoder().decode(challengeChannelPayload), StandardCharsets.UTF_8);
         } else {
             challengeValidationRequired = false;
             challengeSignature = new byte[0];
-            challenge = "";
+            challenge = new byte[0];
         }
 
         try {

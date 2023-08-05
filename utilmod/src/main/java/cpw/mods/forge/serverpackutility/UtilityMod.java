@@ -93,17 +93,18 @@ public class UtilityMod {
             brandingList = LamdbaExceptionUtils.uncheck(() -> brdControl.getDeclaredField("overCopyrightBrandings"));
             brandingList.setAccessible(true);
 
-            Supplier statMessage;
+            String statMessage;
             try {
                 Optional<ClassLoader> classLoader = Launcher.INSTANCE.environment().getProperty((Key)Keys.LOCATORCLASSLOADER.get());
                 Class<?> clz = LamdbaExceptionUtils.uncheck(() -> Class.forName("cpw.mods.forge.serverpacklocator.ModAccessor", true, classLoader.orElse(Thread.currentThread().getContextClassLoader())));
                 Method status = LamdbaExceptionUtils.uncheck(() -> clz.getMethod("getStatusLine"));
-                statMessage = LamdbaExceptionUtils.uncheck(() -> (Supplier)status.invoke(null));
+                statMessage = LamdbaExceptionUtils.uncheck(() -> (String)status.invoke(null));
             } catch (Throwable var5) {
-                statMessage = () -> "ServerPack: FAILED TO LOAD";
+                statMessage = "ServerPack: FAILED TO LOAD";
             }
 
-            statusMessage = statMessage;
+            final String finalStatMessage = statMessage;
+            statusMessage = () -> finalStatMessage;
         }
     }
 }

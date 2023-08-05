@@ -3,6 +3,8 @@ package cpw.mods.forge.serverpacklocator.secure;
 import com.mojang.authlib.exceptions.AuthenticationException;
 import com.mojang.authlib.minecraft.UserApiService;
 import com.mojang.authlib.yggdrasil.ServicesKeyInfo;
+import com.mojang.authlib.yggdrasil.ServicesKeySet;
+import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
 import cpw.mods.modlauncher.ArgumentHandler;
@@ -152,11 +154,11 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private static SignatureValidator getSignatureValidator() {
         final YggdrasilAuthenticationService authenticationService = getAuthenticationService();
 
-        final ServicesKeyInfo keyInfo = authenticationService.getServicesKey();
-        if (keyInfo == null)
+        final ServicesKeySet keySet = authenticationService.getServicesKeySet();
+        if (keySet == null || keySet.keys(ServicesKeyType.PROFILE_KEY).isEmpty())
             return SignatureValidator.ALWAYS_FAIL;
 
-        return SignatureValidator.from(keyInfo);
+        return SignatureValidator.from(keySet, ServicesKeyType.PROFILE_KEY);
     }
 
     private static void validatePublicKey(PublicKeyData keyData, UUID sessionId, SignatureValidator systemValidator) throws Exception

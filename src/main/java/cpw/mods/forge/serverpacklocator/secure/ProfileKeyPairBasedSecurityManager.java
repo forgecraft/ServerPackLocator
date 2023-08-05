@@ -2,14 +2,17 @@ package cpw.mods.forge.serverpacklocator.secure;
 
 import com.mojang.authlib.exceptions.AuthenticationException;
 import com.mojang.authlib.minecraft.UserApiService;
-import com.mojang.authlib.yggdrasil.ServicesKeyInfo;
 import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
+import cpw.mods.forge.serverpacklocator.utils.NonceUtils;
 import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.util.Attribute;
+import io.netty.util.AttributeKey;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,6 +38,8 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
     private static final UUID DEFAULT_NILL_UUID = new UUID(0L, 0L);
 
+    private static final AttributeKey<byte[]> CHALLENGE_ATTRUBUTE_KEY = AttributeKey.newInstance("ClientNonce");
+
     public static ProfileKeyPairBasedSecurityManager getInstance()
     {
         return INSTANCE;
@@ -42,17 +47,15 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
     private final SigningHandler signingHandler;
     private final UUID sessionId;
-    private final byte[] sessionIdPayload;
-
     private final SignatureValidator validator;
+
+    private String challengePayload = "";
 
     private ProfileKeyPairBasedSecurityManager()
     {
         signingHandler = getSigningHandler();
         sessionId = getSessionId();
         validator = getSignatureValidator();
-
-        sessionIdPayload = sessionId != null ? sessionId.toString().getBytes(StandardCharsets.UTF_8) : new byte[0];
     }
 
     private static ArgumentHandler getArgumentHandler() {
@@ -175,15 +178,26 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         }
     }
 
-    private static byte[] buildMessageHashFromSignature(final UUID sessionId)
+    private static byte[] digest(final UUID target)
     {
-        final byte[] sessionIdPayload = new byte[16];
-        ByteBuffer.wrap(sessionIdPayload).order(ByteOrder.BIG_ENDIAN).putLong(sessionId.getMostSignificantBits()).putLong(sessionId.getLeastSignificantBits());
+        final byte[] payload = new byte[16];
+        ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN).putLong(target.getMostSignificantBits()).putLong(target.getLeastSignificantBits());
 
+        return digest(payload);
+    }
+
+    private static byte[] digest(final String target)
+    {
+        final byte[] sessionIdPayload = target.getBytes(StandardCharsets.UTF_8);
+
+        return digest(sessionIdPayload);
+    }
+
+    private static byte[] digest(byte[] payload) {
         try
         {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return md.digest(sessionIdPayload);
+            return md.digest(payload);
         }
         catch (NoSuchAlgorithmException e)
         {
@@ -191,15 +205,35 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         }
     }
 
-    private static String getSignedSessionId(final UUID sessionId, final Signer signer) {
-        byte[] messageHash = buildMessageHashFromSignature(sessionId);
+    private static String sign(final UUID payload, final Signer signer) {
+        byte[] messageHash = digest(payload);
 
+        return signDigest(messageHash, signer);
+    }
+
+    private static String sign(final String payload, final Signer signer) {
+        byte[] messageHash = digest(payload);
+
+        return signDigest(messageHash, signer);
+    }
+
+    private static String sign(final byte[] payload, final Signer signer) {
+        byte[] messageHash = digest(payload);
+
+        return signDigest(messageHash, signer);
+    }
+
+    private static String signDigest(byte[] messageHash, Signer signer) {
         final byte[] signedPayload = signer.sign(messageHash);
         return Base64.getEncoder().encodeToString(signedPayload);
     }
 
-    private static boolean validateSignedSessionId(final UUID sessionId, final SignatureValidator publicKeySignature, final byte[] encryptedSessionHashPayload) {
-        return publicKeySignature.validate(buildMessageHashFromSignature(sessionId), encryptedSessionHashPayload);
+    private static boolean validate(final UUID target, final SignatureValidator validator, final byte[] signature) {
+        return validator.validate(digest(target), signature);
+    }
+
+    private static boolean validate(final String target, final SignatureValidator validator, final byte[] signature) {
+        return validator.validate(digest(target), signature);
     }
 
     @Override
@@ -212,14 +246,25 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         connection.setRequestProperty("Authentication", "SignedId");
         connection.setRequestProperty("AuthenticationId", sessionId.toString());
-        connection.setRequestProperty("AuthenticationSignature", getSignedSessionId(sessionId, signingHandler.signer()));
+        connection.setRequestProperty("AuthenticationSignature", sign(sessionId, signingHandler.signer()));
         connection.setRequestProperty("AuthenticationKey", Base64.getEncoder().encodeToString(Crypt.rsaPublicKeyToString(signingHandler.keyPair().publicKeyData().key()).getBytes(StandardCharsets.UTF_8)));
         connection.setRequestProperty("AuthenticationKeyExpire", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().expiresAt().toString().getBytes(StandardCharsets.UTF_8)));
+        connection.setRequestProperty("AuthenticationKeyExpireDigest", sign(signingHandler.keyPair().publicKeyData().expiresAt().toString(), signingHandler.signer()));
         connection.setRequestProperty("AuthenticationKeySignature", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().publicKeySignature()));
     }
 
     @Override
-    public boolean onServerConnectionRequest(final FullHttpRequest msg)
+    public void onAuthenticateComplete(byte[] challengeString) {
+        this.challengePayload = sign(challengeString, signingHandler.signer());
+    }
+
+    @Override
+    public void authenticateConnection(URLConnection connection) {
+        connection.setRequestProperty("ChallengeSignature", this.challengePayload);
+    }
+
+    @Override
+    public boolean onServerConnectionRequest(ChannelHandlerContext ctx, final FullHttpRequest msg)
     {
         final var headers = msg.headers();
         final String authentication = headers.get("Authentication");
@@ -295,6 +340,20 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
             return false;
         }
 
+
+        final String authenticationExpireDigest = headers.get("AuthenticationKeyExpireDigest");
+        if (authenticationExpireDigest == null) {
+            LOGGER.warn("External client attempted login without expire digest information!");
+            return false;
+        }
+        final byte[] decodedAuthenticationExpireDigest;
+        try {
+            decodedAuthenticationExpireDigest = Base64.getDecoder().decode(authenticationExpireDigest);
+        } catch (Throwable throwable) {
+            LOGGER.warn("External client attempted to login with expire information which was not decode-able: " + publicKeyString);
+            return false;
+        }
+
         final String authenticationKeySignature = headers.get("AuthenticationKeySignature");
         if (authenticationKeySignature == null) {
             LOGGER.warn("External client attempted login without a key signature!");
@@ -314,10 +373,48 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 keySignature
         );
 
+        final boolean challengeValidationRequired;
+        final byte[] challengeSignature;
+        final String challenge;
+        if (!Objects.equals(msg.uri(), "/authenticate")) {
+            final String challengeSignatureHeader = headers.get("ChallengeSignature");
+            if (challengeSignatureHeader == null) {
+                LOGGER.warn("External client attempted login without a challenge signature!");
+                return false;
+            }
+            try {
+                challengeValidationRequired = true;
+                challengeSignature = Base64.getDecoder().decode(challengeSignatureHeader);
+            } catch (Throwable throwable) {
+                LOGGER.warn("External client attempted login with a challenge signature which was not decode-able.");
+                return false;
+            }
+
+            final Attribute<byte[]> challengeChannelAttribute = ctx.channel().attr(CHALLENGE_ATTRUBUTE_KEY);
+            final byte[] challengeChannelPayload = challengeChannelAttribute.get();
+            if (challengeChannelPayload == null) {
+                LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: " + new String(challengeSignature, StandardCharsets.UTF_8));
+                return false;
+            }
+            challenge = new String(challengeChannelPayload, StandardCharsets.UTF_8);
+        } else {
+            challengeValidationRequired = false;
+            challengeSignature = new byte[0];
+            challenge = "";
+        }
+
         try {
             validatePublicKey(keyData, sessionId, validator);
-            if (!validateSignedSessionId(sessionId, keyData.validator(), encryptedSessionHashPayload)) {
+            if (!validate(sessionId, keyData.validator(), encryptedSessionHashPayload)) {
                 LOGGER.warn("External client attempted login with an invalid signature!");
+                return false;
+            }
+            if (!validate(decodedAuthenticationExpire, keyData.validator(), decodedAuthenticationExpireDigest)) {
+                LOGGER.warn("External client attempted login with an invalid expire signature!");
+                return false;
+            }
+            if (challengeValidationRequired && !validate(challenge, keyData.validator(), challengeSignature)) {
+                LOGGER.warn("External client attempted login with an invalid challenge signature!");
                 return false;
             }
             if (!WhitelistVerificationHelper.getInstance().isAllowed(sessionId)) {
@@ -331,6 +428,14 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
             LOGGER.warn("External client failed to authenticate.", e);
             return false;
         }
+    }
+
+    @Override
+    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg) {
+        final String challenge = NonceUtils.createNonce();
+
+        ctx.channel().attr(CHALLENGE_ATTRUBUTE_KEY).set(Base64.getEncoder().encode(challenge.getBytes(StandardCharsets.UTF_8)));
+        msg.headers().set("Challenge", challenge);
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

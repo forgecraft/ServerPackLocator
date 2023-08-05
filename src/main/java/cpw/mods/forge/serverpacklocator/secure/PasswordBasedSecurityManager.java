@@ -1,6 +1,7 @@
 package cpw.mods.forge.serverpacklocator.secure;
 
 import com.electronwill.nightconfig.core.file.FileConfig;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,7 +34,17 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public boolean onServerConnectionRequest(final FullHttpRequest msg)
+    public void onAuthenticateComplete(byte[] challengeString) {
+
+    }
+
+    @Override
+    public void authenticateConnection(URLConnection connection) {
+
+    }
+
+    @Override
+    public boolean onServerConnectionRequest(ChannelHandlerContext ctx, final FullHttpRequest msg)
     {
         final String authHeader = msg.headers().get("Authentication");
         if (!authHeader.startsWith("Basic "))
@@ -82,5 +93,10 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
         {
             throw new IllegalStateException("Missing MD5 hashing algorithm", e);
         }
+    }
+
+    @Override
+    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg) {
+
     }
 }

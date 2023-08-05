@@ -8,18 +8,14 @@ import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedInputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.net.*;
+import java.io.*;
+import java.net.URL;
+import java.net.URLConnection;
+import java.net.URLEncoder;
 import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
@@ -47,6 +43,7 @@ public class SimpleHttpClient {
 
     private boolean connectAndDownload(final String server) {
         try {
+            authenticate(server);
             downloadManifest(server);
             downloadNextFile(server);
             return true;
@@ -54,6 +51,32 @@ public class SimpleHttpClient {
             LOGGER.error("Failed to download modpack from server: " + server, ex);
             return false;
         }
+    }
+
+    protected void authenticate(final String serverHost) throws IOException
+    {
+        var address = serverHost + "/authenticate";
+
+        LOGGER.info("Authenticating to: " + serverHost);
+        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Authenticating to: " + serverHost);
+
+        var url = new URL(address);
+        var connection = url.openConnection();
+        this.connectionSecurityManager.onClientConnectionCreation(connection);
+
+        try (BufferedReader ignored = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
+            final String headerChallengeString = connection.getHeaderField("Challenge");
+            processChallengeString(headerChallengeString);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to download challenge", e);
+        }
+        LOGGER.debug("Received challenge");
+    }
+
+    private void processChallengeString(String challengeStr) {
+        LOGGER.info("Got Challenge {}", challengeStr);
+        var challenge = Base64.getDecoder().decode(challengeStr);
+        this.connectionSecurityManager.onAuthenticateComplete(challenge);
     }
 
     protected void downloadManifest(final String serverHost) throws IOException
@@ -66,8 +89,12 @@ public class SimpleHttpClient {
         var url = new URL(address);
         var connection = url.openConnection();
         this.connectionSecurityManager.onClientConnectionCreation(connection);
+        this.connectionSecurityManager.authenticateConnection(connection);
 
         try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream())) {
+            var challengeString = connection.getHeaderField("Challenge");
+            processChallengeString(challengeString);
+
             this.serverManifest = ServerManifest.loadFromStream(in);
         } catch (IOException e) {
             throw new IllegalStateException("Failed to download manifest", e);
@@ -88,7 +115,7 @@ public class SimpleHttpClient {
         final String nextFile = next.getFileName();
         LOGGER.info("Requesting file {}", nextFile);
         LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting file "+nextFile);
-        final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8.name()))
+        final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8))
           .andThen(s -> s.replaceAll("\\+", "%20"))
           .andThen(s -> "/files/"+s)
           .apply(nextFile);
@@ -97,30 +124,36 @@ public class SimpleHttpClient {
         {
             URLConnection connection = new URL(requestUri).openConnection();
             this.connectionSecurityManager.onClientConnectionCreation(connection);
+            this.connectionSecurityManager.authenticateConnection(connection);
 
             File file = outputDir.resolve(next.getFileName()).toFile();
 
-            FileChannel download = new FileOutputStream(file).getChannel();
+            try (var outputStream = new FileOutputStream(file);
+                 var download = outputStream.getChannel()) {
 
-            long totalBytes = connection.getContentLengthLong(), time = System.nanoTime(), between, length;
-            int percent;
+                long totalBytes = connection.getContentLengthLong(), time = System.nanoTime(), between, length;
+                int percent;
 
-            ReadableByteChannel channel = Channels.newChannel(connection.getInputStream());
+                try (ReadableByteChannel channel = Channels.newChannel(connection.getInputStream())) {
 
-            while (download.transferFrom(channel, file.length(), 1024) > 0)
-            {
-                between = System.nanoTime() - time;
+                    var challengeString = connection.getHeaderField("Challenge");
+                    processChallengeString(challengeString);
 
-                if (between < 1000000000) continue;
+                    while (download.transferFrom(channel, file.length(), 1024) > 0) {
+                        between = System.nanoTime() - time;
 
-                length = file.length();
+                        if (between < 1000000000) continue;
 
-                percent = (int) ((double) length / ((double) totalBytes == 0.0 ? 1.0 : (double) totalBytes) * 100.0);
+                        length = file.length();
 
-                LOGGER.info("Downloaded {}% of {}", percent, nextFile);
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloaded " + percent + "% of " + nextFile);
+                        percent = (int) ((double) length / ((double) totalBytes == 0.0 ? 1.0 : (double) totalBytes) * 100.0);
 
-                time = System.nanoTime();
+                        LOGGER.info("Downloaded {}% of {}", percent, nextFile);
+                        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloaded " + percent + "% of " + nextFile);
+
+                        time = System.nanoTime();
+                    }
+                }
             }
 
             downloadNextFile(server);

@@ -43,7 +43,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             return;
         }
 
-        if (!this.connectionSecurityManager.onServerConnectionRequest(msg)) {
+        if (!this.connectionSecurityManager.onServerConnectionRequest(ctx, msg)) {
             LOGGER.warn("Received unauthorized request.");
             build404(ctx, msg);
             return;
@@ -54,7 +54,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             final String s = serverSidedPackHandler.getFileManager().buildManifest();
             buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
         } else if (msg.uri().startsWith("/files/")) {
-            String fileName = LamdbaExceptionUtils.uncheck(()->URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8.name()));
+            String fileName = LamdbaExceptionUtils.uncheck(()->URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8));
             byte[] file = serverSidedPackHandler.getFileManager().findFile(fileName);
             if (file == null) {
                 LOGGER.debug("Requested file {} not found", fileName);
@@ -98,6 +98,8 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         HttpUtil.setKeepAlive(resp, HttpUtil.isKeepAlive(msg));
         resp.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
         HttpUtil.setContentLength(resp, content.writerIndex());
+
+        this.connectionSecurityManager.onServerResponse(ctx, msg);
         ctx.writeAndFlush(resp);
     }
 
@@ -108,6 +110,8 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         resp.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
         resp.headers().set("filename", fileName);
         HttpUtil.setContentLength(resp, content.writerIndex());
+
+        this.connectionSecurityManager.onServerResponse(ctx, msg);
         ctx.writeAndFlush(resp);
     }
 }

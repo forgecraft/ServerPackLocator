@@ -3,6 +3,7 @@ package cpw.mods.forge.serverpacklocator.secure;
 import com.electronwill.nightconfig.core.file.FileConfig;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
 
 import java.net.URLConnection;
 
@@ -24,5 +25,5 @@ public interface IConnectionSecurityManager
         //Default is no initialization needed.
     }
 
-    void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg);
+    void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp);
 }

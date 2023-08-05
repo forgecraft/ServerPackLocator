@@ -13,9 +13,6 @@ import org.apache.logging.log4j.Logger;
 import javax.net.ssl.SSLException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.Locale;
 import java.util.Objects;
 
 class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
@@ -99,7 +96,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         resp.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
         HttpUtil.setContentLength(resp, content.writerIndex());
 
-        this.connectionSecurityManager.onServerResponse(ctx, msg);
+        this.connectionSecurityManager.onServerResponse(ctx, msg, resp);
         ctx.writeAndFlush(resp);
     }
 
@@ -111,7 +108,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         resp.headers().set("filename", fileName);
         HttpUtil.setContentLength(resp, content.writerIndex());
 
-        this.connectionSecurityManager.onServerResponse(ctx, msg);
+        this.connectionSecurityManager.onServerResponse(ctx, msg, resp);
         ctx.writeAndFlush(resp);
     }
 }

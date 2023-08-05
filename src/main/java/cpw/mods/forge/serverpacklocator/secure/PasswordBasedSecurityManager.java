@@ -3,6 +3,7 @@ package cpw.mods.forge.serverpacklocator.secure;
 import com.electronwill.nightconfig.core.file.FileConfig;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -96,7 +97,7 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg) {
+    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp) {
 
     }
 }

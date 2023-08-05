@@ -11,8 +11,8 @@ import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaders;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -29,8 +29,10 @@ import java.security.PublicKey;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.Base64;
+import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager
 {
@@ -38,7 +40,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
     private static final UUID DEFAULT_NILL_UUID = new UUID(0L, 0L);
 
-    private static final AttributeKey<byte[]> CHALLENGE_ATTRUBUTE_KEY = AttributeKey.newInstance("ClientNonce");
+    private final Map<UUID, byte[]> currentChallenges = new ConcurrentHashMap<>();
 
     public static ProfileKeyPairBasedSecurityManager getInstance()
     {
@@ -273,19 +275,8 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
             return false;
         }
 
-        final String authenticationId = headers.get("AuthenticationId");
-        if (authenticationId == null)
-        {
-            LOGGER.warn("External client attempted login without session id!");
-            return false;
-        }
-        final UUID sessionId;
-        try {
-            sessionId = UUID.fromString(authenticationId);
-        } catch (IllegalArgumentException e) {
-            LOGGER.warn("External client attempted login with invalid session id format: " + authenticationId);
-            return false;
-        }
+        final UUID sessionId = getSessionId(headers);
+        if (sessionId == null) return false;
 
         final String authenticationSignature = headers.get("AuthenticationSignature");
         if (authenticationSignature == null) {
@@ -390,8 +381,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 return false;
             }
 
-            final Attribute<byte[]> challengeChannelAttribute = ctx.channel().attr(CHALLENGE_ATTRUBUTE_KEY);
-            final byte[] challengeChannelPayload = challengeChannelAttribute.get();
+            final byte[] challengeChannelPayload = currentChallenges.get(sessionId);
             if (challengeChannelPayload == null) {
                 LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: " + new String(challengeSignature, StandardCharsets.UTF_8));
                 return false;
@@ -430,12 +420,31 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         }
     }
 
+    private static UUID getSessionId(HttpHeaders headers) {
+        final String authenticationId = headers.get("AuthenticationId");
+        if (authenticationId == null)
+        {
+            LOGGER.warn("External client attempted login without session id!");
+            return null;
+        }
+        final UUID sessionId;
+        try {
+            sessionId = UUID.fromString(authenticationId);
+        } catch (IllegalArgumentException e) {
+            LOGGER.warn("External client attempted login with invalid session id format: " + authenticationId);
+            return null;
+        }
+        return sessionId;
+    }
+
     @Override
-    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg) {
+    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp) {
         final String challenge = NonceUtils.createNonce();
 
-        ctx.channel().attr(CHALLENGE_ATTRUBUTE_KEY).set(Base64.getEncoder().encode(challenge.getBytes(StandardCharsets.UTF_8)));
-        msg.headers().set("Challenge", challenge);
+        final UUID sessionId = getSessionId(msg.headers());
+
+        currentChallenges.put(sessionId, Base64.getEncoder().encode(challenge.getBytes(StandardCharsets.UTF_8)));
+        resp.headers().set("Challenge", challenge);
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

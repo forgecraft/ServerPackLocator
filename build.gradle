@@ -180,7 +180,7 @@ publishing {
 }
 
 changelog {
-    fromTag '7.0.0'
+    fromTag '8.0'
 }
 
 tasks.assemble.dependsOn tasks.distributionJar

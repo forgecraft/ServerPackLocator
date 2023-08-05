@@ -447,7 +447,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         final UUID sessionId = getSessionId(msg.headers());
 
         currentChallenges.put(sessionId, challenge);
-        resp.headers().set("Challenge", Base64.getEncoder().encode(challenge.getBytes(StandardCharsets.UTF_8)));
+        resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

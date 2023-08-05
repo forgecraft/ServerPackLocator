@@ -40,7 +40,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
     private static final UUID DEFAULT_NILL_UUID = new UUID(0L, 0L);
 
-    private final Map<UUID, byte[]> currentChallenges = new ConcurrentHashMap<>();
+    private final Map<UUID, String> currentChallenges = new ConcurrentHashMap<>();
 
     public static ProfileKeyPairBasedSecurityManager getInstance()
     {
@@ -260,7 +260,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void onAuthenticateComplete(byte[] challengeString) {
+    public void onAuthenticateComplete(String challengeString) {
         this.challengePayload = sign(challengeString, signingHandler.signer());
     }
 
@@ -370,7 +370,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         final boolean challengeValidationRequired;
         final byte[] challengeSignature;
-        final byte[] challenge;
+        final String challenge;
         if (!Objects.equals(msg.uri(), "/authenticate")) {
             final String challengeSignatureHeader = headers.get("ChallengeSignature");
             if (challengeSignatureHeader == null) {
@@ -393,7 +393,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         } else {
             challengeValidationRequired = false;
             challengeSignature = new byte[0];
-            challenge = new byte[0];
+            challenge = "";
         }
 
         try {
@@ -446,8 +446,8 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         final UUID sessionId = getSessionId(msg.headers());
 
-        currentChallenges.put(sessionId, Base64.getEncoder().encode(challenge.getBytes(StandardCharsets.UTF_8)));
-        resp.headers().set("Challenge", challenge);
+        currentChallenges.put(sessionId, challenge);
+        resp.headers().set("Challenge", Base64.getEncoder().encode(challenge.getBytes(StandardCharsets.UTF_8)));
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

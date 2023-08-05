@@ -35,7 +35,7 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public void onAuthenticateComplete(byte[] challengeString) {
+    public void onAuthenticateComplete(String challengeString) {
 
     }
 

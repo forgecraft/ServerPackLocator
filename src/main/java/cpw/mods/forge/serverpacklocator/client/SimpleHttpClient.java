@@ -76,7 +76,7 @@ public class SimpleHttpClient {
     private void processChallengeString(String challengeStr) {
         LOGGER.info("Got Challenge {}", challengeStr);
         var challenge = Base64.getDecoder().decode(challengeStr);
-        this.connectionSecurityManager.onAuthenticateComplete(challenge);
+        this.connectionSecurityManager.onAuthenticateComplete(new String(challenge, StandardCharsets.UTF_8));
     }
 
     protected void downloadManifest(final String serverHost) throws IOException

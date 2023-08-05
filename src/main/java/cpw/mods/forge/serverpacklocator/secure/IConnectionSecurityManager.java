@@ -11,7 +11,7 @@ public interface IConnectionSecurityManager
 {
     void onClientConnectionCreation(URLConnection connection);
 
-    void onAuthenticateComplete(byte[] challengeString);
+    void onAuthenticateComplete(String challengeString);
 
     void authenticateConnection(URLConnection connection);
 

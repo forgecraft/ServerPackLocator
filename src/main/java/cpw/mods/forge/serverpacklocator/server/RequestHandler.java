@@ -51,7 +51,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             final String s = serverSidedPackHandler.getFileManager().buildManifest();
             buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
         } else if (msg.uri().startsWith("/files/")) {
-            String fileName = LamdbaExceptionUtils.uncheck(()->URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8));
+            String fileName = LamdbaExceptionUtils.uncheck(() -> URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8));
             byte[] file = serverSidedPackHandler.getFileManager().findFile(fileName);
             if (file == null) {
                 LOGGER.debug("Requested file {} not found", fileName);
@@ -59,6 +59,9 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             } else {
                 buildFileReply(ctx, msg, fileName, file);
             }
+        } else if (Objects.equals("/authenticate", msg.uri())) {
+            LOGGER.info("Authentication request for client {}", determineClientIp(ctx, msg));
+            buildReply(ctx, msg, HttpResponseStatus.OK, "text/plain", "Authentication started.");
         } else {
             LOGGER.debug("Failed to understand message {}", msg);
             build404(ctx, msg);

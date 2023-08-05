@@ -386,7 +386,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: " + new String(challengeSignature, StandardCharsets.UTF_8));
                 return false;
             }
-            challenge = new String(challengeChannelPayload, StandardCharsets.UTF_8);
+            challenge = new String(Base64.getDecoder().decode(challengeChannelPayload), StandardCharsets.UTF_8);
         } else {
             challengeValidationRequired = false;
             challengeSignature = new byte[0];

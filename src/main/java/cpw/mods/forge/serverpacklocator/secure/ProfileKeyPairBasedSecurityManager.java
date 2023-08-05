@@ -445,6 +445,9 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         final String challenge = NonceUtils.createNonce();
 
         final UUID sessionId = getSessionId(msg.headers());
+        if (sessionId == null) {
+            return;
+        }
 
         currentChallenges.put(sessionId, challenge);
         resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));

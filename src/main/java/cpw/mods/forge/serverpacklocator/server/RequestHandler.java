@@ -18,9 +18,9 @@ import java.util.Objects;
 class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     private final ServerSidedPackHandler serverSidedPackHandler;
     private static final Logger LOGGER = LogManager.getLogger();
-    private final IConnectionSecurityManager connectionSecurityManager;
+    private final IConnectionSecurityManager<?> connectionSecurityManager;
 
-    RequestHandler(final ServerSidedPackHandler serverSidedPackHandler,final IConnectionSecurityManager connectionSecurityManager) {
+    RequestHandler(final ServerSidedPackHandler serverSidedPackHandler,final IConnectionSecurityManager<?> connectionSecurityManager) {
         this.serverSidedPackHandler = serverSidedPackHandler;
         this.connectionSecurityManager = connectionSecurityManager;
     }

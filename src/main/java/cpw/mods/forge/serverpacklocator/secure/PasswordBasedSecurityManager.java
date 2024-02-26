@@ -1,6 +1,7 @@
 package cpw.mods.forge.serverpacklocator.secure;
 
 import cpw.mods.forge.serverpacklocator.SidedPackHandler;
+import cpw.mods.forge.serverpacklocator.utils.NonceUtils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -8,8 +9,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Base64;
 import java.util.Locale;
 import java.util.function.Function;
 
@@ -111,6 +114,9 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
 
     @Override
     public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp) {
-
+        //We need to set a challenge for the client to respond to
+        //However we do not validate it at all in this security mode.
+        final String challenge = NonceUtils.createNonce();
+        resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
     }
 }

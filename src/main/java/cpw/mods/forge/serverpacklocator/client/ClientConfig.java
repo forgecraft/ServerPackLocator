@@ -1,6 +1,7 @@
 package cpw.mods.forge.serverpacklocator.client;
 
 import com.electronwill.nightconfig.core.conversion.Conversion;
+import com.electronwill.nightconfig.core.conversion.SpecIntInRange;
 import com.electronwill.nightconfig.core.conversion.SpecNotNull;
 import cpw.mods.forge.serverpacklocator.secure.SecurityConfig;
 import cpw.mods.forge.serverpacklocator.utils.ObjectUtils;
@@ -16,7 +17,10 @@ public class ClientConfig {
 
         private static final Client CLIENT = ObjectUtils.make(
                 new Client(),
-                c -> c.remoteServer = "https://localhost:8080/"
+                c -> {
+                    c.remoteServer = "https://localhost:8080/";
+                    c.threadCount = Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
+                }
         );
 
         public static final ClientConfig INSTANCE = ObjectUtils.make(
@@ -45,10 +49,17 @@ public class ClientConfig {
 
     public static class Client {
 
+        @SpecIntInRange(min = 1, max = 128)
+        private int threadCount;
+
         private String remoteServer;
 
         @SpecNotNull
         private List<DownloadedServerContent> downloadedServerContent = new ArrayList<>();
+
+        public int getThreadCount() {
+            return threadCount;
+        }
 
         public String getRemoteServer() {
             return remoteServer;

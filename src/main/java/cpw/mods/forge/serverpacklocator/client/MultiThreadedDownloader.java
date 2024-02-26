@@ -44,7 +44,7 @@ public class MultiThreadedDownloader {
             final IConnectionSecurityManager<?> connectionSecurityManager
     ) {
         this.executor = Executors.newFixedThreadPool(
-                Math.max(1, Runtime.getRuntime().availableProcessors() - 2)
+                Math.min(Math.max(1, Runtime.getRuntime().availableProcessors() - 2), packHandler.getConfig().getClient().getThreadCount())
         );
         this.clientSidedPackHandler = packHandler;
         this.connectionSecurityManager = connectionSecurityManager;
@@ -71,7 +71,7 @@ public class MultiThreadedDownloader {
                 }
                 LOGGER.debug("Received challenge");
             } catch (Exception e) {
-                LOGGER.error("Failed to open a connection", e);
+                throw new RuntimeException("Failed to open a connection", e);
             }
         }, executor);
     }
@@ -149,6 +149,7 @@ public class MultiThreadedDownloader {
                     this.connectionSecurityManager.authenticateConnection(connection);
 
                     File file = filePath.toFile();
+                    file.getParentFile().mkdirs();
 
                     try (var outputStream = new FileOutputStream(file);
                             var download = outputStream.getChannel()) {

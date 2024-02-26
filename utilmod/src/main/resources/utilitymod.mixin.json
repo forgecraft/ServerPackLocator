@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "cpw.mods.forge.serverpackutility.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "BrandingControlMixin"
+  ],
+  "client": [],
+  "server": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

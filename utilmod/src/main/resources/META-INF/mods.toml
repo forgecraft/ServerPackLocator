@@ -12,3 +12,5 @@ Server Pack Locator Utility mod.
 
 This mod is distributed as part of the ServerPackLocator to allow interaction with the game.
 '''
+[[mixins]]
+config="utilitymod.mixin.json"

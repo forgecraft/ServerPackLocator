@@ -1,8 +1,0 @@
-[server]
-# Enter a port to listen on. This will be serving public HTTP requests.
-port = 8080
-[security]
-# The type of security that the remote server uses, for now supported are: publickey (default), password. If password is used, please set the server password below.
-type="publickey"
-# The server password: Change to the password you received from the server owner
-password = "!!CHANGEME_WHEN_USING_PASSWORD_MODE!!"

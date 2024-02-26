@@ -114,10 +114,12 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.mojang:authlib:6.0.52")
     implementation("org.apache.logging.log4j:log4j-api:2.19.0")
-    shadow("io.netty:netty-all:4.1.97.Final")
+    shadow("io.netty:netty-codec-http:4.1.97.Final")
     implementation("com.electronwill.night-config:core:3.6.4")
     implementation("com.electronwill.night-config:toml:3.6.4")
-    shadow("com.electronwill.night-config:json:3.6.4")
+    shadow("com.electronwill.night-config:json:3.6.4") {
+        transitive = false
+    }
     implementation("org.apache.maven:maven-artifact:3.8.5")
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
 }

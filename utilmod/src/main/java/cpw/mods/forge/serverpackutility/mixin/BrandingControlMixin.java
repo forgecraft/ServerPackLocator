@@ -17,9 +17,6 @@ import java.util.List;
 @Mixin(BrandingControl.class)
 public class BrandingControlMixin {
 
-    @Shadow
-    private static List<String> overCopyrightBrandings;
-
     @WrapOperation(
             method = "computeOverCopyrightBrandings",
             at = @At(value = "INVOKE", target = "Lcom/google/common/collect/ImmutableList$Builder;build()Lcom/google/common/collect/ImmutableList;")

@@ -1,50 +1,30 @@
 package cpw.mods.forge.serverpacklocator.server;
 
-import com.electronwill.nightconfig.core.ConfigFormat;
+import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 import cpw.mods.forge.serverpacklocator.secure.ConnectionSecurityManager;
-import cpw.mods.forge.serverpacklocator.secure.WhitelistVerificationHelper;
-import net.minecraftforge.forgespi.locating.IModLocator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import net.neoforged.neoforgespi.locating.IModLocator;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.OptionalInt;
+import java.util.function.Supplier;
 
-public class ServerSidedPackHandler extends SidedPackHandler
+public class ServerSidedPackHandler extends SidedPackHandler<ServerConfig>
 {
-    private static final Logger LOGGER = LogManager.getLogger();
     private ServerFileManager serverFileManager;
 
-    public ServerSidedPackHandler(final Path serverModsDir) {
-        super(serverModsDir);
+    @Override
+    protected ServerConfig createDefaultConfiguration() {
+        return ServerConfig.Default.INSTANCE;
+    }
+
+    @Override
+    protected Supplier<ServerConfig> getConfigurationConstructor() {
+        return ServerConfig::new;
     }
 
     @Override
     protected boolean validateConfig() {
-        final OptionalInt port = getConfig().getOptionalInt("server.port");
-
-        if (port.isEmpty())
-        {
-            LOGGER.fatal("Invalid configuration file found: {}, please delete or correct before trying again", getConfig().getNioPath());
-            throw new IllegalStateException("Invalid configuation found");
-        }
-
-        ConnectionSecurityManager.getInstance().validateConfiguration(getConfig());
-
-        return true;
-    }
-
-    @Override
-    protected boolean handleMissing(final Path path, final ConfigFormat<?> configFormat) throws IOException {
-        Files.copy(Objects.requireNonNull(getClass().getResourceAsStream("/defaultserverconfig.toml")), path);
-        return true;
+        return ConnectionSecurityManager.getInstance().validateConfiguration(this, getConfig().getSecurity());
     }
 
     @Override
@@ -53,15 +33,28 @@ public class ServerSidedPackHandler extends SidedPackHandler
     }
 
     @Override
-    protected List<IModLocator.ModFileOrException> processModList(List<IModLocator.ModFileOrException> scannedMods) {
-        serverFileManager.parseModList(scannedMods);
-        return serverFileManager.getModList();
+    public List<IModLocator> buildLocators() {
+        return getConfig().getServer()
+                .getExposedServerContent()
+                .stream()
+                .filter(e -> e.getSyncType().loadOnServer())
+                .peek(e -> getGameDir().resolve(e.getDirectory().getPath()).toFile().mkdirs())
+                .map(c -> LaunchEnvironmentHandler.INSTANCE.getModFolderFactory().build(getGameDir().resolve(c.getDirectory().getPath()), "SPL-" + c.getName()))
+                .toList();
     }
 
     @Override
-    public void initialize(final IModLocator dirLocator) {
-        serverFileManager = new ServerFileManager(this, getConfig().<List<String>>getOptional("server.excludedModIds").orElse(Collections.emptyList()));
-        SimpleHttpServer.run(this, getConfig().get("server.password"));
+    protected List<IModLocator.ModFileOrException> processModList(List<IModLocator.ModFileOrException> scannedMods) {
+        return scannedMods;
+    }
+
+    @Override
+    public void initialize() {
+        serverFileManager = new ServerFileManager(
+                this,
+                getConfig().getServer().getExposedServerContent()
+        );
+        SimpleHttpServer.run(this);
     }
 
     public ServerFileManager getFileManager() {

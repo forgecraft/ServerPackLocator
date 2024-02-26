@@ -5,12 +5,22 @@ plugins {
     id 'eclipse'
     id 'idea'
     id 'jacoco'
-    id 'net.minecraftforge.gradleutils'
+    id 'net.neoforged.gradleutils'
     id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
+gradleutils {
+    version {
+        branches {
+            suffixBranch()
+            suffixExemptedBranch('main')
+        }
+    }
+}
+
+version = gradleutils.version.toString()
+
 group = 'cpw.mods.forge'
-version = gradleutils.getTagOffsetBranchVersion()
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 repositories {
@@ -18,7 +28,7 @@ repositories {
     mavenLocal()
     maven {
         name = "forge"
-        url = "https://maven.minecraftforge.net/"
+        url = "https://maven.neoforged.net/"
     }
     maven {
         name = "mojang"
@@ -61,6 +71,7 @@ shadowJar {
     archiveClassifier = 'all-without-utility-mod'
     configurations = [project.configurations.shadow]
     relocate 'io.netty', 'shadow.io.netty'
+    relocate 'com.electronwill.nightconfig.json', 'shadow.com.electronwill.nightconfig.json'
     manifest {
         attributes([
                 'Specification-Title':      project.name,
@@ -98,15 +109,16 @@ task sourcesJar(type: Jar) {
 
 
 dependencies {
-    implementation("net.minecraftforge:forgespi:6.0.2")
-    implementation("cpw.mods:modlauncher:10.0.8")
-    implementation("com.google.code.gson:gson:2.8.0")
-    implementation("com.mojang:authlib:4.0.43")
-    implementation("org.apache.logging.log4j:log4j-api:2.17.0")
-    shadow("io.netty:netty-all:4.1.25.Final")
-    implementation("com.electronwill.night-config:core:3.6.0")
-    implementation("com.electronwill.night-config:toml:3.6.0")
-    implementation("org.apache.maven:maven-artifact:3.6.3")
+    implementation("net.neoforged:neoforgespi:9.0.2")
+    implementation("cpw.mods:modlauncher:10.0.9")
+    implementation("com.google.code.gson:gson:2.10.1")
+    implementation("com.mojang:authlib:6.0.52")
+    implementation("org.apache.logging.log4j:log4j-api:2.19.0")
+    shadow("io.netty:netty-all:4.1.97.Final")
+    implementation("com.electronwill.night-config:core:3.6.4")
+    implementation("com.electronwill.night-config:toml:3.6.4")
+    shadow("com.electronwill.night-config:json:3.6.4")
+    implementation("org.apache.maven:maven-artifact:3.8.5")
     testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
 }
 
@@ -126,13 +138,9 @@ publishing {
         mavenJava(MavenPublication) {
             from components.java
 
-            artifact sourcesJar {
-                classifier "sources"
-            }
+            artifact sourcesJar
 
-            artifact distributionJar {
-                classifier 'all'
-            }
+            artifact distributionJar
 
             pom {
                 name = 'Server Pack Mod Locator'
@@ -178,9 +186,8 @@ publishing {
         }
     }
 }
-
 changelog {
-    fromTag '8.0'
+    from '8.0'
 }
 
 tasks.assemble.dependsOn tasks.distributionJar

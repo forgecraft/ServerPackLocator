@@ -48,7 +48,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
         if (Objects.equals("/servermanifest.json", msg.uri())) {
             LOGGER.info("Manifest request for client {}", determineClientIp(ctx, msg));
-            final String s = serverSidedPackHandler.getFileManager().buildManifest();
+            final String s = serverSidedPackHandler.getFileManager().getManifest().toJson();
             buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
         } else if (msg.uri().startsWith("/files/")) {
             String fileName = LamdbaExceptionUtils.uncheck(() -> URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8));

@@ -1,6 +1,6 @@
 package cpw.mods.forge.serverpacklocator.secure;
 
-import com.electronwill.nightconfig.core.file.FileConfig;
+import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -11,9 +11,9 @@ import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
-import java.util.Optional;
+import java.util.function.Function;
 
-public final class PasswordBasedSecurityManager implements IConnectionSecurityManager
+public final class PasswordBasedSecurityManager implements IConnectionSecurityManager<SecurityConfig.PasswordSecurityConfig>
 {
     private static final PasswordBasedSecurityManager INSTANCE = new PasswordBasedSecurityManager();
     private static final Logger LOGGER = LogManager.getLogger();
@@ -64,21 +64,34 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public void validateConfiguration(final FileConfig config)
-    {
-        final Optional<String> password = config.getOptional("security.password");
-        if (password.isEmpty()) {
-            LOGGER.fatal("Invalid configuration file {} found. Could not locate server password. " +
-                                 "Repair or delete this file to continue", config.getNioPath().toString());
-            throw new IllegalStateException("Invalid configuration file found, please delete or correct");
-        }
+    public Function<SecurityConfig, SecurityConfig.PasswordSecurityConfig> getConfigurationExtractor(SidedPackHandler<?> handler) {
+        return config -> {
+            final SecurityConfig.PasswordSecurityConfig passwordConfig = config.getPassword();
+            if (passwordConfig == null) {
+                LOGGER.fatal("Invalid configuration file {} found. Could not locate server password security configuration. " +
+                        "Repair or delete this file to continue", handler.getConfigFilePath());
+                throw new IllegalStateException("Invalid configuration file found, please delete or correct");
+            }
+            return passwordConfig;
+        };
     }
 
     @Override
-    public void initialize(final FileConfig config)
-    {
-        final String password = config.get("security.password");
+    public boolean validateConfiguration(SidedPackHandler<?> handler, SecurityConfig.PasswordSecurityConfig passwordSecurityConfig) {
+        final String password = passwordSecurityConfig.getPassword();
+        if (password.isEmpty()) {
+            LOGGER.fatal("Invalid configuration file {} found. Could not locate server password. " +
+                    "Repair or delete this file to continue", handler.getConfigFilePath());
+            return false;
+        }
 
+        return true;
+    }
+
+    @Override
+    public void initialize(final SecurityConfig.PasswordSecurityConfig config)
+    {
+        final String password = config.getPassword();
         try
         {
             MessageDigest md = MessageDigest.getInstance("SHA-256");

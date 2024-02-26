@@ -1,11 +1,12 @@
 package cpw.mods.forge.serverpacklocator.secure;
 
-import com.mojang.authlib.exceptions.AuthenticationException;
 import com.mojang.authlib.minecraft.UserApiService;
 import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
+import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
+import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 import cpw.mods.forge.serverpacklocator.utils.NonceUtils;
 import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
@@ -34,7 +35,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager
+public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager<Object>
 {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
@@ -121,14 +122,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         if (accessToken.isBlank())
             return UserApiService.OFFLINE;
 
-        try
-        {
-            return authenticationService.createUserApiService(accessToken);
-        }
-        catch (AuthenticationException e)
-        {
-            throw new RuntimeException("Failed to create user api service to get profile key pair!", e);
-        }
+        return authenticationService.createUserApiService(accessToken);
     }
 
     private static KeyPairResponse getKeyPair() {
@@ -141,11 +135,11 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         if (keyPairResponse == null)
             return null;
 
-        return new ProfileKeyPair(Crypt.stringToPemRsaPrivateKey(keyPairResponse.getPrivateKey()),
+        return new ProfileKeyPair(Crypt.stringToPemRsaPrivateKey(keyPairResponse.keyPair().privateKey()),
                 new PublicKeyData(
-                Crypt.stringToRsaPublicKey(keyPairResponse.getPublicKey()),
-                Instant.parse(keyPairResponse.getExpiresAt()),
-                keyPairResponse.getPublicKeySignature().array()));
+                Crypt.stringToRsaPublicKey(keyPairResponse.keyPair().publicKey()),
+                Instant.parse(keyPairResponse.expiresAt()),
+                keyPairResponse.publicKeySignature().array()));
     }
 
     private static SigningHandler getSigningHandler() {
@@ -451,6 +445,24 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         currentChallenges.put(sessionId, challenge);
         resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Override
+    public boolean validateConfiguration(SidedPackHandler<?> handler, Object o) {
+        final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
+        if (uuid == null || uuid.isEmpty()) {
+            // invalid UUID - probably offline mode. not supported
+            LaunchEnvironmentHandler.INSTANCE.addProgressMessage("NO UUID found. Offline mode does not work. No server mods will be downloaded");
+            LOGGER.error("There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.");
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public void initialize() {
+        //No initialization needed.
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

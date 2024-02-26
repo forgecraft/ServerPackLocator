@@ -21,14 +21,13 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 import net.minecraft.client.gui.screens.TitleScreen;
-import net.minecraftforge.client.event.RenderGuiEvent;
-import net.minecraftforge.client.event.ScreenEvent;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.server.ServerStartedEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.fml.loading.FMLEnvironment.Keys;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.fml.loading.FMLEnvironment.Keys;
+import net.neoforged.neoforge.client.event.ScreenEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -37,13 +36,13 @@ public class UtilityMod {
 
     private static final Logger LOGGER = LogManager.getLogger();
 
-    public UtilityMod() {
-        FMLJavaModLoadingContext.get().getModEventBus().addListener(this::onClient);
-        MinecraftForge.EVENT_BUS.addListener(this::onServerStart);
+    public UtilityMod(IEventBus modBus) {
+        modBus.addListener(this::onClient);
+        NeoForge.EVENT_BUS.addListener(this::onServerStart);
     }
 
     private void onClient(FMLClientSetupEvent event) {
-        MinecraftForge.EVENT_BUS.addListener(UtilityMod.Wrapper::onShowGui);
+        NeoForge.EVENT_BUS.addListener(UtilityMod.Wrapper::onShowGui);
     }
 
     private void onServerStart(ServerStartedEvent startedEvent) {
@@ -89,7 +88,7 @@ public class UtilityMod {
         }
 
         static {
-            Class<?> brdControl = LamdbaExceptionUtils.uncheck(() -> Class.forName("net.minecraftforge.internal.BrandingControl", true, Thread.currentThread().getContextClassLoader()));
+            Class<?> brdControl = LamdbaExceptionUtils.uncheck(() -> Class.forName("net.neoforged.neoforge.internal.BrandingControl", true, Thread.currentThread().getContextClassLoader()));
             brandingList = LamdbaExceptionUtils.uncheck(() -> brdControl.getDeclaredField("overCopyrightBrandings"));
             brandingList.setAccessible(true);
 

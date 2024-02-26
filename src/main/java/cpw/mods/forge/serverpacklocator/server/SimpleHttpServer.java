@@ -24,11 +24,11 @@ public class SimpleHttpServer {
         throw new IllegalArgumentException("Can not instantiate SimpleHttpServer.");
     }
 
-    public static void run(ServerSidedPackHandler handler, final String password) {
+    public static void run(ServerSidedPackHandler handler) {
         EventLoopGroup masterGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Master - ", r));
         EventLoopGroup slaveGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Slave - ", r));
 
-        int port = handler.getConfig().getOptionalInt("server.port").orElse(8443);
+        int port = handler.getConfig().getServer().getPort();
         final ServerBootstrap bootstrap = new ServerBootstrap()
                 .group(masterGroup, slaveGroup)
                 .channel(NioServerSocketChannel.class)

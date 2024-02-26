@@ -83,7 +83,7 @@ public class MultiThreadedDownloader {
     }
 
     private CompletableFuture<PreparedServerDownloadData> downloadManifest() {
-        return authenticate().thenComposeAsync(v -> {
+        return authenticate().thenApplyAsync(v -> {
             try {
                 var serverHost = clientSidedPackHandler.getConfig().getClient().getRemoteServer();
                 var address = serverHost + "/servermanifest.json";

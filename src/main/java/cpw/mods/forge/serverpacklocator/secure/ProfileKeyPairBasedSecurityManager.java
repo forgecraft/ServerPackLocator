@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager<SecurityConfig.PublicKeyPairSecurityConfig>
 {
@@ -446,6 +447,11 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         currentChallenges.put(sessionId, challenge);
         resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Override
+    public Function<SecurityConfig, SecurityConfig.PublicKeyPairSecurityConfig> getConfigurationExtractor(SidedPackHandler<?> handler) {
+        return SecurityConfig::getPublicKeyPair;
     }
 
     @Override

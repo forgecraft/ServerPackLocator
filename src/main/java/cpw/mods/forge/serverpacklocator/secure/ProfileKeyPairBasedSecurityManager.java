@@ -14,6 +14,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
+import net.neoforged.api.distmarker.Dist;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -456,13 +457,16 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
     @Override
     public boolean validateConfiguration(SidedPackHandler<?> handler, SecurityConfig.PublicKeyPairSecurityConfig config) {
-        final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
-        if (uuid == null || uuid.isEmpty()) {
-            // invalid UUID - probably offline mode. not supported
-            LaunchEnvironmentHandler.INSTANCE.addProgressMessage("NO UUID found. Offline mode does not work. No server mods will be downloaded");
-            LOGGER.error("There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.");
-            return false;
+        if (LaunchEnvironmentHandler.INSTANCE.getDist() == Dist.CLIENT) {
+            final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
+            if (uuid == null || uuid.isEmpty()) {
+                // invalid UUID - probably offline mode. not supported
+                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("NO UUID found. Offline mode does not work. No server mods will be downloaded");
+                LOGGER.error("There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.");
+                return false;
+            }
         }
+
         final Boolean validateChallenges = config.isValidateChallenges();
         if (validateChallenges == null) {
             LOGGER.warn("Invalid configuration file {} found. Could not locate server public key security configuration. " +

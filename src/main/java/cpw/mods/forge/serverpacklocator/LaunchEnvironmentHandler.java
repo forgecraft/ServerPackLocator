@@ -34,7 +34,7 @@ public class LaunchEnvironmentHandler {
         return getValue(IEnvironment.Keys.UUID).orElse("");
     }
 
-    Dist getDist() {
+    public Dist getDist() {
         return getValue(net.neoforged.neoforgespi.Environment.Keys.DIST).orElse(Dist.CLIENT);
     }
 

@@ -139,7 +139,7 @@ public class MultiThreadedDownloader {
                 LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting file "+nextFile);
                 final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8))
                         .andThen(s -> s.replaceAll("\\+", "%20"))
-                        .andThen(s -> "/files/"+s)
+                        .andThen(s -> "/files/"+ s)
                         .apply(nextFile);
 
                 try

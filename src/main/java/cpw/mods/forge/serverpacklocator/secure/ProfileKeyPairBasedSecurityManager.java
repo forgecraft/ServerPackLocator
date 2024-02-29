@@ -35,7 +35,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager<Object>
+public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager<SecurityConfig.PublicKeyPairSecurityConfig>
 {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
@@ -51,6 +51,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private final SigningHandler signingHandler;
     private final UUID sessionId;
     private final SignatureValidator validator;
+    private boolean validateChallenges = true;
 
     private String challengePayload = "";
 
@@ -372,7 +373,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 return false;
             }
             try {
-                challengeValidationRequired = true;
+                challengeValidationRequired = this.validateChallenges;
                 challengeSignature = Base64.getDecoder().decode(challengeSignatureHeader);
             } catch (Throwable throwable) {
                 LOGGER.warn("External client attempted login with a challenge signature which was not decode-able.");
@@ -448,7 +449,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public boolean validateConfiguration(SidedPackHandler<?> handler, Object o) {
+    public boolean validateConfiguration(SidedPackHandler<?> handler, SecurityConfig.PublicKeyPairSecurityConfig config) {
         final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
         if (uuid == null || uuid.isEmpty()) {
             // invalid UUID - probably offline mode. not supported
@@ -456,13 +457,19 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
             LOGGER.error("There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.");
             return false;
         }
+        final Boolean validateChallenges = config.isValidateChallenges();
+        if (validateChallenges == null) {
+            LOGGER.warn("Invalid configuration file {} found. Could not locate server public key security configuration. " +
+                    "Repair or delete this file to continue", handler.getConfigFilePath());
+            return false;
+        }
 
         return true;
     }
 
     @Override
-    public void initialize() {
-        //No initialization needed.
+    public void initialize(SecurityConfig.PublicKeyPairSecurityConfig publicKeyPairSecurityConfig) {
+        this.validateChallenges = publicKeyPairSecurityConfig.isValidateChallenges();
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

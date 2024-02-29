@@ -65,7 +65,13 @@ public final class ConnectionSecurityManager
     }
 
     private static <TSecurityManagerConfig> void initialize(final SidedPackHandler<?> handler, final SecurityConfig config, final IConnectionSecurityManager<TSecurityManagerConfig> connectionSecurityManager) {
-        final TSecurityManagerConfig securityManagerConfig = connectionSecurityManager.getConfigurationExtractor(handler).apply(config);
+        final Function<SecurityConfig, TSecurityManagerConfig> configurationExtractor = connectionSecurityManager.getConfigurationExtractor(handler);
+        if (configurationExtractor == null) {
+            connectionSecurityManager.initialize();
+            return;
+        }
+
+        final TSecurityManagerConfig securityManagerConfig = configurationExtractor.apply(config);
         if (securityManagerConfig == null) {
             connectionSecurityManager.initialize();
         } else {

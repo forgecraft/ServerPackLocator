@@ -70,7 +70,9 @@ project(':Mod').afterEvaluate {
 shadowJar {
     archiveClassifier = 'all-without-utility-mod'
     configurations = [project.configurations.shadow]
-    relocate 'io.netty', 'shadow.io.netty'
+    relocate 'io.netty.handler.codec.http', 'shadow.io.netty.handler.codec.http'
+    relocate 'io.netty.handler.codec.rtsp', 'shadow.io.netty.handler.codec.rtsp'
+    relocate 'io.netty.handler.codec.spdy', 'shadow.io.netty.handler.codec.spdy'
     relocate 'com.electronwill.nightconfig.json', 'shadow.com.electronwill.nightconfig.json'
     manifest {
         attributes([
@@ -114,7 +116,10 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.mojang:authlib:6.0.52")
     implementation("org.apache.logging.log4j:log4j-api:2.19.0")
-    shadow("io.netty:netty-codec-http:4.1.97.Final")
+    implementation("io.netty:netty-codec-http:4.1.97.Final")
+    shadow("io.netty:netty-codec-http:4.1.97.Final") {
+        transitive = false
+    }
     implementation("com.electronwill.night-config:core:3.6.4")
     implementation("com.electronwill.night-config:toml:3.6.4")
     shadow("com.electronwill.night-config:json:3.6.4") {
@@ -189,7 +194,7 @@ publishing {
     }
 }
 changelog {
-    from '8.0'
+    from '9.0'
 }
 
 tasks.assemble.dependsOn tasks.distributionJar

@@ -134,7 +134,7 @@ public class MultiThreadedDownloader {
                     return;
                 }
 
-                final String nextFile = rootDir.relativize(filePath).toString();
+                final String nextFile = rootDir.relativize(filePath).toString().replace("\\", "/");
                 LOGGER.info("Requesting file {}", nextFile);
                 LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting file "+nextFile);
                 final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8))

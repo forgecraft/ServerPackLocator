@@ -1,12 +1,9 @@
+
 plugins {
     id 'maven-publish'
-    id 'java'
     id 'java-library'
-    id 'eclipse'
-    id 'idea'
-    id 'jacoco'
     id 'net.neoforged.gradleutils'
-    id 'com.github.johnrengelman.shadow' version '7.1.2'
+    id 'io.github.goooler.shadow'
 }
 
 gradleutils {
@@ -21,98 +18,61 @@ gradleutils {
 version = gradleutils.version.toString()
 
 group = 'cpw.mods.forge'
-java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
-repositories {
-    mavenCentral()
-    mavenLocal()
-    maven {
-        name = "forge"
-        url = "https://maven.neoforged.net/"
-    }
-    maven {
-        name = "mojang"
-        url = "https://libraries.minecraft.net/"
-    }
-}
-
-jacoco {
-    toolVersion = "0.8.2"
-}
-
-test {
-    useJUnitPlatform()
-}
-
-jar {
-    manifest {
-        attributes([
-                'Specification-Title':      project.name,
-                'Specification-Vendor':     'CPW',
-                'Specification-Version':    project.version,
-                'Implementation-Title':     project.name,
-                'Implementation-Version':   project.version,
-                'Implementation-Vendor':    'CPW',
-                'Automatic-Module-Name':    'serverpacklocator',
-        ] as LinkedHashMap)
-    }
-}
-
-project(':Mod').afterEvaluate {
-    tasks.distributionJar {
-        from (project(':Mod').tasks.jar.outputs.files) {
-            into 'utilmod'
+configurations {
+    utilMod {
+        canBeResolved = true
+        canBeConsumed = false
+        transitive = false
+        withDependencies {
+            it.add(dependencyFactory.create(project(":utilmod")))
         }
+    }
+}
 
+def copyUtilMod = tasks.register("copyUtilMod", Copy) {
+    from(configurations.utilMod)
+    into(layout.buildDirectory.dir("generated/splUtilMod"))
+    rename {
+        // The shadow plugin says we should rename this to not have a .jar ending
+        return "SPL-utilmod.embedded"
+    }
+}
+
+sourceSets {
+    main {
+        resources {
+            srcDir(copyUtilMod)
+        }
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+    withSourcesJar()
+}
+
+jar.configure {
+    manifest {
+        attributes(
+                'Automatic-Module-Name': 'serverpacklocator'
+        )
     }
 }
 
 shadowJar {
-    archiveClassifier = 'all-without-utility-mod'
     configurations = [project.configurations.shadow]
     relocate 'io.netty.handler.codec.http', 'shadow.io.netty.handler.codec.http'
     relocate 'io.netty.handler.codec.rtsp', 'shadow.io.netty.handler.codec.rtsp'
     relocate 'io.netty.handler.codec.spdy', 'shadow.io.netty.handler.codec.spdy'
     relocate 'com.electronwill.nightconfig.json', 'shadow.com.electronwill.nightconfig.json'
-    manifest {
-        attributes([
-                'Specification-Title':      project.name,
-                'Specification-Vendor':     'CPW',
-                'Specification-Version':    project.version,
-                'Implementation-Title':     project.name,
-                'Implementation-Version':   project.version,
-                'Implementation-Vendor':    'CPW',
-                'Automatic-Module-Name':    'serverpacklocator',
-        ] as LinkedHashMap)
-    }
 }
-
-task distributionJar(type: Jar) {
-    archiveClassifier = 'all'
-    dependsOn shadowJar
-    from project.zipTree(tasks.shadowJar.archiveFile)
-    manifest {
-        attributes([
-                'Specification-Title':      project.name,
-                'Specification-Vendor':     'CPW',
-                'Specification-Version':    project.version,
-                'Implementation-Title':     project.name,
-                'Implementation-Version':   project.version,
-                'Implementation-Vendor':    'CPW',
-                'Automatic-Module-Name':    'serverpacklocator',
-        ] as LinkedHashMap)
-    }
-}
-
-task sourcesJar(type: Jar) {
-    getArchiveClassifier().set('sources')
-    from sourceSets.main.allSource
-}
-
 
 dependencies {
-    implementation("net.neoforged:neoforgespi:9.0.2")
-    implementation("cpw.mods:modlauncher:10.0.9")
+    implementation("net.neoforged.fancymodloader:loader:4.0.11")
+
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("com.mojang:authlib:6.0.52")
     implementation("org.apache.logging.log4j:log4j-api:2.19.0")
@@ -125,76 +85,7 @@ dependencies {
     shadow("com.electronwill.night-config:json:3.6.4") {
         transitive = false
     }
-    implementation("org.apache.maven:maven-artifact:3.8.5")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.4.2")
+    implementation('org.apache.maven:maven-artifact:3.9.6')
 }
 
-artifacts {
-    archives jar
-    archives shadowJar
-    archives sourcesJar
-    archives distributionJar
-}
-
-compileJava {
-    options.compilerArgs << "-XDignore.symbol.file"
-}
-
-publishing {
-    publications {
-        mavenJava(MavenPublication) {
-            from components.java
-
-            artifact sourcesJar
-
-            artifact distributionJar
-
-            pom {
-                name = 'Server Pack Mod Locator'
-                description = 'Server Pack Mod Locator'
-                url = 'https://github.com/cpw/serverpacklocator'
-                scm {
-                    url = 'https://github.com/cpw/serverpacklocator'
-                    connection = 'scm:git:git://github.com/cpw/serverpacklocator.git'
-                    developerConnection = 'scm:git:git@github.com:cpw/serverpacklocator.git'
-                }
-                issueManagement {
-                    system = 'github'
-                    url = 'https://github.com/cpw/serverpacklocator/issues'
-                }
-
-                licenses {
-                    license {
-                        name = 'LGPLv2.1'
-                        url = 'https://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt'
-                    }
-                }
-
-                developers {
-                    developer {
-                        id = 'cpw'
-                        name = 'cpw'
-                    }
-                }
-            }
-        }
-    }
-
-    if (System.getenv().containsKey("LDTTeamJfrogUsername") && System.getenv().containsKey("LDTTeamJfrogPassword")) {
-        repositories {
-            maven {
-                name 'LDTTeamJfrog'
-                credentials {
-                    username System.getenv().get("LDTTeamJfrogUsername")
-                    password System.getenv().get("LDTTeamJfrogPassword")
-                }
-                url 'https://ldtteam.jfrog.io/ldtteam/mods-maven'
-            }
-        }
-    }
-}
-changelog {
-    from '9.0'
-}
-
-tasks.assemble.dependsOn tasks.distributionJar
+assemble.dependsOn shadowJar

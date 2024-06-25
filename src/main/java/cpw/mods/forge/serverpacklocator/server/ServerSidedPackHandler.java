@@ -1,10 +1,10 @@
 package cpw.mods.forge.serverpacklocator.server;
 
-import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 import cpw.mods.forge.serverpacklocator.secure.ConnectionSecurityManager;
-import net.neoforged.neoforgespi.locating.IModLocator;
+import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
+import java.io.File;
 import java.util.List;
 import java.util.function.Supplier;
 
@@ -33,19 +33,13 @@ public class ServerSidedPackHandler extends SidedPackHandler<ServerConfig>
     }
 
     @Override
-    public List<IModLocator> buildLocators() {
+    public List<File> getModFolders() {
         return getConfig().getServer()
                 .getExposedServerContent()
                 .stream()
                 .filter(e -> e.getSyncType().loadOnServer())
-                .peek(e -> getGameDir().resolve(e.getDirectory().getPath()).toFile().mkdirs())
-                .map(c -> LaunchEnvironmentHandler.INSTANCE.getModFolderFactory().build(getGameDir().resolve(c.getDirectory().getPath()), "SPL-" + c.getName()))
+                .map(c -> getGameDir().resolve(c.getDirectory().getPath()).toFile())
                 .toList();
-    }
-
-    @Override
-    protected List<IModLocator.ModFileOrException> processModList(List<IModLocator.ModFileOrException> scannedMods) {
-        return scannedMods;
     }
 
     @Override

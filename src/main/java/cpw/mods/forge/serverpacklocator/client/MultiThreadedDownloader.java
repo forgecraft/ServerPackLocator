@@ -4,7 +4,6 @@ import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
-import cpw.mods.modlauncher.api.LamdbaExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -14,7 +13,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.net.URL;
+import java.net.URI;
 import java.net.URLConnection;
 import java.net.URLEncoder;
 import java.nio.channels.Channels;
@@ -59,7 +58,7 @@ public class MultiThreadedDownloader {
                 LOGGER.info("Authenticating to: " + serverHost);
                 LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Authenticating to: " + serverHost);
 
-                var url = new URL(address);
+                var url = URI.create(address).toURL();
                 var connection = url.openConnection();
                 this.connectionSecurityManager.onClientConnectionCreation(connection);
 
@@ -91,7 +90,7 @@ public class MultiThreadedDownloader {
                 LOGGER.info("Requesting server manifest from: " + serverHost);
                 LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting server manifest from: " + serverHost);
 
-                var url = new URL(address);
+                var url = URI.create(address).toURL();
                 var connection = url.openConnection();
                 this.connectionSecurityManager.onClientConnectionCreation(connection);
                 this.connectionSecurityManager.authenticateConnection(connection);
@@ -136,50 +135,42 @@ public class MultiThreadedDownloader {
 
                 final String nextFile = rootDir.relativize(filePath).toString().replace("\\", "/");
                 LOGGER.info("Requesting file {}", nextFile);
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting file "+nextFile);
-                final String requestUri = server + LamdbaExceptionUtils.rethrowFunction((String f) -> URLEncoder.encode(f, StandardCharsets.UTF_8))
-                        .andThen(s -> s.replaceAll("\\+", "%20"))
-                        .andThen(s -> "/files/"+ s)
-                        .apply(nextFile);
+                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloading " + nextFile);
+                var requestUri = server + "/files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
 
-                try
-                {
-                    URLConnection connection = new URL(requestUri).openConnection();
-                    this.connectionSecurityManager.onClientConnectionCreation(connection);
-                    this.connectionSecurityManager.authenticateConnection(connection);
+                URLConnection connection = URI.create(requestUri).toURL().openConnection();
+                this.connectionSecurityManager.onClientConnectionCreation(connection);
+                this.connectionSecurityManager.authenticateConnection(connection);
 
-                    File file = filePath.toFile();
-                    file.getParentFile().mkdirs();
+                File file = filePath.toFile();
+                file.getParentFile().mkdirs();
 
-                    try (var outputStream = new FileOutputStream(file);
-                            var download = outputStream.getChannel()) {
+                try (var outputStream = new FileOutputStream(file);
+                        var download = outputStream.getChannel()) {
 
-                        long totalBytes = connection.getContentLengthLong(), time = System.nanoTime(), between, length;
-                        int percent;
+                    long totalBytes = connection.getContentLengthLong(), time = System.nanoTime(), between, length;
+                    int percent;
 
-                        try (ReadableByteChannel channel = Channels.newChannel(connection.getInputStream())) {
+                    try (ReadableByteChannel channel = Channels.newChannel(connection.getInputStream())) {
 
-                            var challengeString = connection.getHeaderField("Challenge");
-                            processChallengeString(challengeString);
+                        var challengeString = connection.getHeaderField("Challenge");
+                        processChallengeString(challengeString);
 
-                            while (download.transferFrom(channel, file.length(), 1024) > 0) {
-                                between = System.nanoTime() - time;
+                        while (download.transferFrom(channel, file.length(), 8192) > 0) {
+                            between = System.nanoTime() - time;
 
-                                if (between < 1000000000) continue;
+                            if (between < 1000000000) continue;
 
-                                length = file.length();
+                            length = file.length();
 
-                                percent = (int) ((double) length / ((double) totalBytes == 0.0 ? 1.0 : (double) totalBytes) * 100.0);
+                            percent = (int) ((double) length / ((double) totalBytes == 0.0 ? 1.0 : (double) totalBytes) * 100.0);
 
-                                LOGGER.info("Downloaded {}% of {}", percent, nextFile);
-                                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloaded " + percent + "% of " + nextFile);
+                            LOGGER.info("Downloaded {}% of {}", percent, nextFile);
+                            LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloaded " + percent + "% of " + nextFile);
 
-                                time = System.nanoTime();
-                            }
+                            time = System.nanoTime();
                         }
                     }
-                } catch (Exception ex) {
-                    throw new IllegalStateException("Failed to download file: " + nextFile, ex);
                 }
             } catch (Exception e) {
                 throw new RuntimeException("Failed to download a file", e);

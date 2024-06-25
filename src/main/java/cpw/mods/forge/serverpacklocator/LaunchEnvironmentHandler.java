@@ -5,8 +5,6 @@ import cpw.mods.modlauncher.Launcher;
 import cpw.mods.modlauncher.api.IEnvironment;
 import cpw.mods.modlauncher.api.TypesafeMap;
 import net.neoforged.api.distmarker.Dist;
-import net.neoforged.neoforgespi.locating.IModDirectoryLocatorFactory;
-import net.neoforged.neoforgespi.locating.ModFileFactory;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -36,14 +34,6 @@ public class LaunchEnvironmentHandler {
 
     public Dist getDist() {
         return getValue(net.neoforged.neoforgespi.Environment.Keys.DIST).orElse(Dist.CLIENT);
-    }
-
-    public IModDirectoryLocatorFactory getModFolderFactory() {
-        return getValue(net.neoforged.neoforgespi.Environment.Keys.MODDIRECTORYFACTORY).orElseThrow(()->new IllegalStateException("Missing MODDIRECTORYFACTORY, wut?"));
-    }
-
-    public ModFileFactory getModFileFactory() {
-        return getValue(net.neoforged.neoforgespi.Environment.Keys.MODFILEFACTORY).orElseThrow(()->new IllegalStateException("Missing MODFILEFACTORY, wut?"));
     }
 
     public void addProgressMessage(String message) {

@@ -2,21 +2,18 @@ package cpw.mods.forge.serverpacklocator;
 
 import com.electronwill.nightconfig.core.Config;
 import com.electronwill.nightconfig.core.ConfigFormat;
-import com.electronwill.nightconfig.core.InMemoryFormat;
 import com.electronwill.nightconfig.core.conversion.ObjectConverter;
 import com.electronwill.nightconfig.core.file.FileConfig;
 import com.electronwill.nightconfig.core.io.WritingMode;
 import com.electronwill.nightconfig.json.JsonFormat;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import com.google.gson.Gson;
-import net.neoforged.neoforgespi.locating.IModLocator;
+import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Objects;
 import java.util.function.Supplier;
 
 public abstract class SidedPackHandler<TConfig> {
@@ -24,7 +21,7 @@ public abstract class SidedPackHandler<TConfig> {
     private final Path splDirectory;
     private final Path configFilePath;
     private final TConfig packConfig;
-    private boolean isValid;
+    private final boolean isValid;
 
     protected SidedPackHandler() {
         this.gameDir = LaunchEnvironmentHandler.INSTANCE.getGameDir();
@@ -87,12 +84,10 @@ public abstract class SidedPackHandler<TConfig> {
         return isValid;
     }
 
-    protected abstract List<IModLocator.ModFileOrException> processModList(final List<IModLocator.ModFileOrException> scannedMods);
-
     public abstract void initialize();
 
     protected abstract boolean waitForDownload();
 
-    public abstract List<IModLocator> buildLocators();
+    public abstract List<File> getModFolders();
 
 }

@@ -51,6 +51,7 @@ java {
 }
 
 jar.configure {
+    archiveClassifier = "plain"
     manifest {
         attributes(
                 'Automatic-Module-Name': 'serverpacklocator'
@@ -59,6 +60,7 @@ jar.configure {
 }
 
 shadowJar {
+    archiveClassifier = ""
     from(copyUtilMod)
     configurations = [project.configurations.shadow]
     relocate 'io.netty.handler.codec.http', 'shadow.io.netty.handler.codec.http'

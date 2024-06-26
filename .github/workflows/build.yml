@@ -2,7 +2,6 @@ name: 'Build'
 
 on:
   push:
-    # Only on branches, not tags/releases
     branches:
       - '**'
   pull_request:
@@ -46,3 +45,21 @@ jobs:
         with:
           name: dist
           path: build/libs/
+
+      - name: Remove plain variant before publication
+        run: rm build/libs/SPL-*-plain.jar
+
+      - name: Get project version
+        id: get_version
+        run: ./gradlew configureGitHubActions
+
+      # Auto-Release when pushed to main
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        with:
+          tag_name: v${{ steps.get_version.outputs.version }}
+          files: build/SPL-*.jar
+          make_latest: true
+          fail_on_unmatched_files: true
+          generate_release_notes: true

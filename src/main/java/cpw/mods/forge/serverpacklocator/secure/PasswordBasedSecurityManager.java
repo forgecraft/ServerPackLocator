@@ -1,6 +1,6 @@
 package cpw.mods.forge.serverpacklocator.secure;
 
-import cpw.mods.forge.serverpacklocator.SidedPackHandler;
+import cpw.mods.forge.serverpacklocator.ConfigException;
 import cpw.mods.forge.serverpacklocator.utils.NonceUtils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
@@ -8,15 +8,15 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.net.URLConnection;
+import javax.annotation.Nullable;
+import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Locale;
-import java.util.function.Function;
 
-public final class PasswordBasedSecurityManager implements IConnectionSecurityManager<SecurityConfig.PasswordSecurityConfig>
+public final class PasswordBasedSecurityManager implements IConnectionSecurityManager
 {
     private static final PasswordBasedSecurityManager INSTANCE = new PasswordBasedSecurityManager();
     private static final Logger LOGGER = LogManager.getLogger();
@@ -32,19 +32,9 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public void onClientConnectionCreation(final URLConnection connection)
+    public void onClientConnectionCreation(HttpRequest.Builder requestBuilder)
     {
-        connection.setRequestProperty("Authentication", "Basic " + passwordHash);
-    }
-
-    @Override
-    public void onAuthenticateComplete(String challengeString) {
-
-    }
-
-    @Override
-    public void authenticateConnection(URLConnection connection) {
-
+        requestBuilder.header("Authentication", "Basic " + passwordHash);
     }
 
     @Override
@@ -53,48 +43,32 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
         final String authHeader = msg.headers().get("Authentication");
         if (!authHeader.startsWith("Basic "))
         {
-            LOGGER.warn("User tried to login with different authentication scheme: " + authHeader);
+            LOGGER.warn("User tried to login with different authentication scheme: {}", authHeader);
             return false;
         }
 
         final String auth = authHeader.substring(6);
         if (!auth.equals(passwordHash))
         {
-            LOGGER.warn("User tried to login with wrong password: " + auth);
+            LOGGER.warn("User tried to login with wrong password: {}", auth);
             return false;
         }
         return true;
     }
 
     @Override
-    public Function<SecurityConfig, SecurityConfig.PasswordSecurityConfig> getConfigurationExtractor(SidedPackHandler<?> handler) {
-        return config -> {
-            final SecurityConfig.PasswordSecurityConfig passwordConfig = config.getPassword();
-            if (passwordConfig == null) {
-                LOGGER.fatal("Invalid configuration file {} found. Could not locate server password security configuration. " +
-                        "Repair or delete this file to continue", handler.getConfigFilePath());
-                throw new IllegalStateException("Invalid configuration file found, please delete or correct");
-            }
-            return passwordConfig;
-        };
-    }
-
-    @Override
-    public boolean validateConfiguration(SidedPackHandler<?> handler, SecurityConfig.PasswordSecurityConfig passwordSecurityConfig) {
-        final String password = passwordSecurityConfig.getPassword();
-        if (password.isEmpty()) {
-            LOGGER.fatal("Invalid configuration file {} found. Could not locate server password. " +
-                    "Repair or delete this file to continue", handler.getConfigFilePath());
-            return false;
-        }
-
-        return true;
-    }
-
-    @Override
-    public void initialize(final SecurityConfig.PasswordSecurityConfig config)
+    public void initialize(SecurityConfig config) throws ConfigException
     {
-        final String password = config.getPassword();
+        var passwordConfig = config.getPassword();
+        if (passwordConfig == null) {
+            throw new ConfigException("Could not locate server password security configuration.");
+        }
+
+        final String password = passwordConfig.getPassword();
+        if (password.isEmpty()) {
+            throw new ConfigException("No server password is set.");
+        }
+
         try
         {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
@@ -108,7 +82,7 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
         }
         catch (NoSuchAlgorithmException e)
         {
-            throw new IllegalStateException("Missing MD5 hashing algorithm", e);
+            throw new IllegalStateException("Missing SHA-256 hashing algorithm", e);
         }
     }
 
@@ -118,5 +92,11 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
         //However we do not validate it at all in this security mode.
         final String challenge = NonceUtils.createNonce();
         resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Nullable
+    @Override
+    public String getUnavailabilityReason() {
+        return null;
     }
 }

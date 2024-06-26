@@ -2,7 +2,6 @@ package cpw.mods.forge.serverpacklocator;
 
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
-import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 import java.util.function.Supplier;
 

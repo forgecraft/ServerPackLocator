@@ -28,6 +28,10 @@ configurations {
             it.add(dependencyFactory.create(project(":utilmod")))
         }
     }
+    shadowedLibraryElements {
+        canBeConsumed = true
+        extendsFrom shadow
+    }
 }
 
 def copyUtilMod = tasks.register("copyUtilMod", Copy) {
@@ -36,14 +40,6 @@ def copyUtilMod = tasks.register("copyUtilMod", Copy) {
     rename {
         // The shadow plugin says we should rename this to not have a .jar ending
         return "SPL-utilmod.embedded"
-    }
-}
-
-sourceSets {
-    main {
-        resources {
-            srcDir(copyUtilMod)
-        }
     }
 }
 
@@ -63,6 +59,7 @@ jar.configure {
 }
 
 shadowJar {
+    from(copyUtilMod)
     configurations = [project.configurations.shadow]
     relocate 'io.netty.handler.codec.http', 'shadow.io.netty.handler.codec.http'
     relocate 'io.netty.handler.codec.rtsp', 'shadow.io.netty.handler.codec.rtsp'

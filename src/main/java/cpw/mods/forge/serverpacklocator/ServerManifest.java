@@ -2,6 +2,7 @@ package cpw.mods.forge.serverpacklocator;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import cpw.mods.forge.serverpacklocator.utils.SyncType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,13 +15,20 @@ import java.util.List;
 import java.util.function.Consumer;
 
 public class ServerManifest {
-    private static final Logger LOGGER = LogManager.getLogger();
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private List<DirectoryServerData> directories;
 
     public static ServerManifest loadFromStream(final InputStream stream) {
         return GSON.fromJson(new InputStreamReader(stream), ServerManifest.class);
+    }
+
+    public static ServerManifest fromString(String content) {
+        try {
+            return GSON.fromJson(content, ServerManifest.class);
+        } catch (JsonSyntaxException e) {
+            throw new RuntimeException("Failed to parse manifest received from server: " + e, e);
+        }
     }
 
     public ServerManifest() {

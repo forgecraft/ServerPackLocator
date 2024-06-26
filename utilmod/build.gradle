@@ -20,21 +20,28 @@ neoForge {
         utilmod {
             modSourceSets = [sourceSets.main]
         }
-        spl {
-            dependency project(':')
-        }
     }
 
     runs {
         client {
             client()
+            gameDirectory = file("run/client")
         }
         server {
             server()
+            gameDirectory = file("run/server")
         }
     }
 }
 
+runClient {
+    args("--launch_target", mainClass.get())
+    mainClass = "net.covers1624.devlogin.DevLogin"
+}
+
 dependencies {
+    clientAdditionalRuntimeClasspath project(path: ":", configuration: 'shadowedLibraryElements')
+    serverAdditionalRuntimeClasspath project(path: ":", configuration: 'shadowedLibraryElements')
     implementation project(':')
+    runtimeOnly "net.covers1624:DevLogin:0.1.0.4"
 }

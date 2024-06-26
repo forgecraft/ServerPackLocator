@@ -1,8 +1,6 @@
 package cpw.mods.forge.serverpacklocator.server;
 
-import cpw.mods.forge.serverpacklocator.secure.ConnectionSecurityManager;
 import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
-import cpw.mods.forge.serverpacklocator.secure.ProfileKeyPairBasedSecurityManager;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -26,11 +24,10 @@ public class SimpleHttpServer {
         throw new IllegalArgumentException("Can not instantiate SimpleHttpServer.");
     }
 
-    public static void run(ServerSidedPackHandler handler) {
+    public static void run(int port, IConnectionSecurityManager securityManager, ServerFileManager fileManager) {
         EventLoopGroup masterGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Master - ", r));
         EventLoopGroup slaveGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Slave - ", r));
 
-        int port = handler.getConfig().getServer().getPort();
         final ServerBootstrap bootstrap = new ServerBootstrap()
                 .group(masterGroup, slaveGroup)
                 .channel(NioServerSocketChannel.class)
@@ -51,8 +48,7 @@ public class SimpleHttpServer {
                         ch.pipeline().addLast("codec", new HttpServerCodec());
                         ch.pipeline().addLast("aggregator", new HttpObjectAggregator(2 << 19));
                         ch.pipeline().addLast("request", new RequestHandler(
-                                handler,
-                                ConnectionSecurityManager.getInstance().initialize(handler, handler.getConfig().getSecurity())
+                                securityManager, fileManager
                         ));
                     }
                 })

@@ -15,12 +15,12 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
-    private final ServerSidedPackHandler serverSidedPackHandler;
+    private final ServerFileManager serverFileManager;
     private static final Logger LOGGER = LogManager.getLogger();
-    private final IConnectionSecurityManager<?> connectionSecurityManager;
+    private final IConnectionSecurityManager connectionSecurityManager;
 
-    RequestHandler(final ServerSidedPackHandler serverSidedPackHandler,final IConnectionSecurityManager<?> connectionSecurityManager) {
-        this.serverSidedPackHandler = serverSidedPackHandler;
+    RequestHandler(IConnectionSecurityManager connectionSecurityManager, ServerFileManager serverFileManager) {
+        this.serverFileManager = serverFileManager;
         this.connectionSecurityManager = connectionSecurityManager;
     }
 
@@ -47,11 +47,11 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
         if (Objects.equals("/servermanifest.json", msg.uri())) {
             LOGGER.info("Manifest request for client {}", determineClientIp(ctx, msg));
-            final String s = serverSidedPackHandler.getFileManager().getManifest().toJson();
+            final String s = serverFileManager.getManifest().toJson();
             buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
         } else if (msg.uri().startsWith("/files/")) {
             String fileName = URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8);
-            byte[] file = serverSidedPackHandler.getFileManager().findFile(fileName);
+            byte[] file = serverFileManager.findFile(fileName);
             if (file == null) {
                 LOGGER.debug("Requested file {} not found", fileName);
                 build404(ctx, msg);

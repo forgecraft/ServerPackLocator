@@ -8,28 +8,25 @@ import com.electronwill.nightconfig.core.io.WritingMode;
 import com.electronwill.nightconfig.json.JsonFormat;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import com.google.gson.Gson;
-import net.neoforged.neoforgespi.locating.IModFileCandidateLocator;
+import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
+import cpw.mods.forge.serverpacklocator.secure.SecurityConfigHolder;
 
+import javax.annotation.Nullable;
 import java.io.File;
-import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Supplier;
 
-public abstract class SidedPackHandler<TConfig> {
+public abstract class SidedPackHandler<TConfig extends SecurityConfigHolder> {
     private final Path gameDir;
-    private final Path splDirectory;
-    private final Path configFilePath;
     private final TConfig packConfig;
-    private final boolean isValid;
+    protected final IConnectionSecurityManager securityManager;
 
-    protected SidedPackHandler() {
-        this.gameDir = LaunchEnvironmentHandler.INSTANCE.getGameDir();
-        this.splDirectory = this.gameDir.resolve("spl");
-        this.configFilePath = this.splDirectory.resolve("config.toml");
+    protected SidedPackHandler(Path gameDir, Path configPath) throws ConfigException {
+        this.gameDir = gameDir;
 
         var config = FileConfig
-                .builder(this.configFilePath)
+                .builder(configPath)
                 .onFileNotFound(this::handleMissing)
                 .build();
         config.load();
@@ -37,10 +34,10 @@ public abstract class SidedPackHandler<TConfig> {
 
         var objectConverter = new ObjectConverter();
         this.packConfig = objectConverter.toObject(config, getConfigurationConstructor());
-        this.isValid = validateConfig();
+        this.securityManager = IConnectionSecurityManager.create(packConfig.getSecurity());
     }
 
-    protected final boolean handleMissing(final Path path, final ConfigFormat<?> configFormat) throws IOException {
+    protected final boolean handleMissing(final Path path, final ConfigFormat<?> configFormat) {
         final File target = path.toFile();
         target.getParentFile().mkdirs();
 
@@ -61,13 +58,6 @@ public abstract class SidedPackHandler<TConfig> {
 
     protected abstract Supplier<TConfig> getConfigurationConstructor();
 
-    protected abstract boolean validateConfig();
-
-    public Path getConfigFilePath() {
-
-        return configFilePath;
-    }
-
     public TConfig getConfig() {
         return packConfig;
     }
@@ -76,18 +66,10 @@ public abstract class SidedPackHandler<TConfig> {
         return gameDir;
     }
 
-    public Path getSplDirectory() {
-        return splDirectory;
-    }
-
-    protected boolean isValid() {
-        return isValid;
-    }
-
-    public abstract void initialize();
-
-    protected abstract boolean waitForDownload();
-
     public abstract List<File> getModFolders();
 
+    @Nullable
+    public String getUnavailabilityReason() {
+        return securityManager.getUnavailabilityReason();
+    }
 }

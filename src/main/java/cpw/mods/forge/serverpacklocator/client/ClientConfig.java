@@ -1,24 +1,22 @@
 package cpw.mods.forge.serverpacklocator.client;
 
-import com.electronwill.nightconfig.core.conversion.Conversion;
 import com.electronwill.nightconfig.core.conversion.SpecIntInRange;
 import com.electronwill.nightconfig.core.conversion.SpecNotNull;
 import cpw.mods.forge.serverpacklocator.secure.SecurityConfig;
+import cpw.mods.forge.serverpacklocator.secure.SecurityConfigHolder;
 import cpw.mods.forge.serverpacklocator.utils.ObjectUtils;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-public class ClientConfig {
+public class ClientConfig implements SecurityConfigHolder {
 
     public static final class Default {
 
         private static final Client CLIENT = ObjectUtils.make(
                 new Client(),
                 c -> {
-                    c.remoteServer = "https://localhost:8080/";
+                    c.remoteServer = "http://localhost:8080/";
                     c.threadCount = Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
                 }
         );
@@ -43,6 +41,7 @@ public class ClientConfig {
         return client;
     }
 
+    @Override
     public SecurityConfig getSecurity() {
         return security;
     }

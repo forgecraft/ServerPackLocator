@@ -4,18 +4,20 @@ import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
+import net.neoforged.fml.loading.ImmediateWindowHandler;
+import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.UncheckedIOException;
 import java.net.URI;
-import java.net.URLConnection;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
@@ -25,8 +27,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -36,43 +42,35 @@ public class MultiThreadedDownloader {
 
     private final Executor executor;
     private final ClientSidedPackHandler clientSidedPackHandler;
-    private final IConnectionSecurityManager<?> connectionSecurityManager;
+    private final IConnectionSecurityManager connectionSecurityManager;
+    private final HttpClient httpClient;
+    private final String remoteServer;
 
     public MultiThreadedDownloader(
             final ClientSidedPackHandler packHandler,
-            final IConnectionSecurityManager<?> connectionSecurityManager
+            final IConnectionSecurityManager connectionSecurityManager
     ) {
         this.executor = Executors.newFixedThreadPool(
                 Math.min(Math.max(1, Runtime.getRuntime().availableProcessors() - 2), packHandler.getConfig().getClient().getThreadCount())
         );
+        this.httpClient = HttpClient.newBuilder().executor(executor).build();
         this.clientSidedPackHandler = packHandler;
         this.connectionSecurityManager = connectionSecurityManager;
+        remoteServer = clientSidedPackHandler.getConfig().getClient().getRemoteServer();
     }
 
     private CompletableFuture<Void> authenticate() {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                var serverHost = clientSidedPackHandler.getConfig().getClient().getRemoteServer();
-                var address = serverHost + "/authenticate";
+        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Authenticating to: " + remoteServer);
 
-                LOGGER.info("Authenticating to: " + serverHost);
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Authenticating to: " + serverHost);
-
-                var url = URI.create(address).toURL();
-                var connection = url.openConnection();
-                this.connectionSecurityManager.onClientConnectionCreation(connection);
-
-                try (BufferedReader ignored = new BufferedReader(new InputStreamReader(connection.getInputStream()))) {
-                    final String headerChallengeString = connection.getHeaderField("Challenge");
-                    processChallengeString(headerChallengeString);
-                } catch (IOException e) {
-                    throw new IllegalStateException("Failed to download challenge", e);
-                }
-                LOGGER.debug("Received challenge");
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to open a connection", e);
-            }
-        }, executor);
+        return makeRequest("authenticate", false, HttpResponse.BodyHandlers.discarding())
+                .thenAccept(response -> {
+                    var challenge = response.headers().firstValue("Challenge").orElse(null);
+                    if (challenge == null) {
+                        throw new RuntimeException("Did not receive a challenge from the server.");
+                    }
+                    processChallengeString(challenge);
+                    LOGGER.debug("Received challenge");
+                });
     }
 
     private void processChallengeString(String challengeStr) {
@@ -82,80 +80,56 @@ public class MultiThreadedDownloader {
     }
 
     private CompletableFuture<PreparedServerDownloadData> downloadManifest() {
-        return authenticate().thenApplyAsync(v -> {
-            try {
-                var serverHost = clientSidedPackHandler.getConfig().getClient().getRemoteServer();
-                var address = serverHost + "/servermanifest.json";
+        return authenticate().thenCompose(ignored -> {
+            LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting server manifest...");
 
-                LOGGER.info("Requesting server manifest from: " + serverHost);
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting server manifest from: " + serverHost);
+            return makeRequest("servermanifest.json", true, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        }).thenApply(response -> {
+            response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
 
-                var url = URI.create(address).toURL();
-                var connection = url.openConnection();
-                this.connectionSecurityManager.onClientConnectionCreation(connection);
-                this.connectionSecurityManager.authenticateConnection(connection);
+            var serverManifest = ServerManifest.fromString(response.body());
+            LOGGER.debug("Received manifest");
 
-                ServerManifest serverManifest;
-                try (BufferedInputStream in = new BufferedInputStream(connection.getInputStream())) {
-                    var challengeString = connection.getHeaderField("Challenge");
-                    processChallengeString(challengeString);
-
-                    serverManifest = ServerManifest.loadFromStream(in);
-                } catch (IOException e) {
-                    throw new IllegalStateException("Failed to download manifest", e);
-                }
-                LOGGER.debug("Received manifest");
-
-                return new PreparedServerDownloadData(
-                        serverManifest,
-                        clientSidedPackHandler.getConfig().getClient().getDownloadedServerContent()
-                );
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to open a connection", e);
-            }
-        }, executor);
+            return new PreparedServerDownloadData(
+                    serverManifest,
+                    clientSidedPackHandler.getConfig().getClient().getDownloadedServerContent()
+            );
+        });
     }
 
-    private CompletableFuture<Void> downloadFile(final String server, final ServerManifest.DirectoryServerData nextDirectory , final ServerManifest.FileData next) {
-        return CompletableFuture.runAsync(() -> {
-            try {
-                var rootDir = clientSidedPackHandler.getGameDir();
-                var outputDir = rootDir.resolve(nextDirectory.getPath());
-                var filePath = outputDir.resolve(next.getFileName());
-                final String existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
-                if (Objects.equals(next.getChecksum(), existingChecksum)) {
-                    LOGGER.debug("Found existing file {} - skipping", next.getFileName());
-                    return;
-                }
+    private CompletableFuture<Void> downloadFile(final ServerManifest.DirectoryServerData nextDirectory, final ServerManifest.FileData next) {
+        var rootDir = clientSidedPackHandler.getGameDir();
+        var outputDir = rootDir.resolve(nextDirectory.getPath());
+        var filePath = outputDir.resolve(next.getFileName());
+        final String existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
+        if (Objects.equals(next.getChecksum(), existingChecksum)) {
+            LOGGER.debug("Found existing file {} - skipping", next.getFileName());
+            return CompletableFuture.completedFuture(null);
+        }
 
-                if (existingChecksum != null && !nextDirectory.getSyncType().forceSync()) {
-                    LOGGER.warn("Found existing file {} with different checksum - file is not forced synced - skipping", next.getFileName());
-                    return;
-                }
+        if (existingChecksum != null && !nextDirectory.getSyncType().forceSync()) {
+            LOGGER.warn("Found existing file {} with different checksum - file is not forced synced - skipping", next.getFileName());
+            return CompletableFuture.completedFuture(null);
+        }
 
-                final String nextFile = rootDir.relativize(filePath).toString().replace("\\", "/");
-                LOGGER.info("Requesting file {}", nextFile);
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloading " + nextFile);
-                var requestUri = server + "/files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
+        final String nextFile = rootDir.relativize(filePath).toString().replace("\\", "/");
+        LOGGER.info("Requesting file {}", nextFile);
+        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloading " + nextFile);
+        var path = "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
 
-                URLConnection connection = URI.create(requestUri).toURL().openConnection();
-                this.connectionSecurityManager.onClientConnectionCreation(connection);
-                this.connectionSecurityManager.authenticateConnection(connection);
+        return makeRequest(path, true, HttpResponse.BodyHandlers.ofInputStream())
+                .thenApply(response -> {
+                    File file = filePath.toFile();
+                    file.getParentFile().mkdirs();
 
-                File file = filePath.toFile();
-                file.getParentFile().mkdirs();
+                    response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
 
-                try (var outputStream = new FileOutputStream(file);
-                        var download = outputStream.getChannel()) {
-
-                    long totalBytes = connection.getContentLengthLong(), time = System.nanoTime(), between, length;
+                    var totalBytes = response.headers().firstValueAsLong("Content-Length").orElse(0L);
+                    long time = System.nanoTime(), between, length;
                     int percent;
 
-                    try (ReadableByteChannel channel = Channels.newChannel(connection.getInputStream())) {
-
-                        var challengeString = connection.getHeaderField("Challenge");
-                        processChallengeString(challengeString);
-
+                    try (var outputStream = new FileOutputStream(file); var download = outputStream.getChannel();
+                         ReadableByteChannel channel = Channels.newChannel(response.body())) {
                         while (download.transferFrom(channel, file.length(), 8192) > 0) {
                             between = System.nanoTime() - time;
 
@@ -170,17 +144,44 @@ public class MultiThreadedDownloader {
 
                             time = System.nanoTime();
                         }
+                    } catch (IOException e) {
+                        throw new RuntimeException("Download of " + path + " failed: " + e, e);
                     }
-                }
-            } catch (Exception e) {
-                throw new RuntimeException("Failed to download a file", e);
-            }
-        }, executor);
+                    return null;
+                });
     }
 
-    public boolean download() {
+    private <T> CompletableFuture<HttpResponse<T>> makeRequest(String path, boolean authenticated, HttpResponse.BodyHandler<T> bodyHandler) {
+        var requestUri = joinUrl(remoteServer, path);
+
+        LOGGER.info("ServerPackLocator is requesting {}...", requestUri);
+        StartupNotificationManager.addModMessage("SPL is requesting " + requestUri);
+
+        var requestBuilder = HttpRequest.newBuilder(requestUri);
+        this.connectionSecurityManager.onClientConnectionCreation(requestBuilder);
+        if (authenticated) {
+            this.connectionSecurityManager.authenticateConnection(requestBuilder);
+        }
+        var request = requestBuilder.build();
+        return httpClient.sendAsync(request, bodyHandler);
+    }
+
+    private static URI joinUrl(String baseUrl, String path) {
+        // Join base url and path while avoiding double-slashes
+        while (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (!baseUrl.endsWith("/")) {
+            baseUrl += "/";
+        }
+        return URI.create(baseUrl + path);
+    }
+
+    public void download() {
+        var progressBar = StartupNotificationManager.addProgressBar("Downloading server pack", 0);
+
         CompletableFuture<Void> downloadTask = downloadManifest()
-                .thenComposeAsync(preparedManifest -> {
+                .thenCompose(preparedManifest -> {
                     final ServerManifest manifest = preparedManifest.manifest();
                     final List<CompletableFuture<Void>> downloads = new ArrayList<>();
 
@@ -188,13 +189,13 @@ public class MultiThreadedDownloader {
                             .stream()
                             .collect(Collectors.toMap(ClientConfig.DownloadedServerContent::getName, Function.identity()));
 
-                    if (manifest.getDirectories() != null && manifest.getDirectories() != null) {
+                    if (manifest.getDirectories() != null) {
                         manifest.getDirectories().forEach(directory -> {
                             List<Pattern> directoryBlacklist =
                                     lookup.get(directory.getName()) == null ? List.of() :
-                                    lookup.get(directory.getName()).getBlackListRegex().stream()
-                                    .map(Pattern::compile)
-                                    .toList();
+                                            lookup.get(directory.getName()).getBlackListRegex().stream()
+                                                    .map(Pattern::compile)
+                                                    .toList();
 
                             if (directory.getFileData() != null) {
                                 directory.getFileData().forEach(fileData -> {
@@ -202,21 +203,38 @@ public class MultiThreadedDownloader {
                                         LOGGER.info("Skipping blacklisted file {}", fileData.getFileName());
                                         return;
                                     }
-                                    downloads.add(downloadFile(clientSidedPackHandler.getConfig().getClient().getRemoteServer(), directory, fileData));
+                                    downloads.add(downloadFile(directory, fileData));
                                 });
                             }
                         });
                     }
 
                     return CompletableFuture.allOf(downloads.toArray(new CompletableFuture[0]));
-                }, executor);
+                });
 
         try {
-            downloadTask.join();
-            return true;
-        } catch (Exception e) {
-            LOGGER.error("Caught exception downloading mods from server", e);
-            return false;
+            while (true) {
+                try {
+                    downloadTask.get(50, TimeUnit.MILLISECONDS);
+                    break;
+                } catch (TimeoutException ignored) {
+                    // Not done yet! Update progress UI
+                    ImmediateWindowHandler.renderTick();
+                }
+            }
+        } catch (ExecutionException e) {
+            if (e.getCause() instanceof IOException ioException) {
+                throw new UncheckedIOException(ioException);
+            } else if (e.getCause() instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            } else {
+                throw new RuntimeException(e.getCause());
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        } finally {
+            progressBar.complete();
         }
     }
 
@@ -224,5 +242,8 @@ public class MultiThreadedDownloader {
         return downloadManifest().join().manifest();
     }
 
-    public record PreparedServerDownloadData(ServerManifest manifest, List<ClientConfig.DownloadedServerContent> directoryContent) {}
+    public record PreparedServerDownloadData(ServerManifest manifest,
+                                             List<ClientConfig.DownloadedServerContent> directoryContent) {
+    }
 }
+

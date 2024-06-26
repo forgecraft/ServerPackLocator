@@ -5,8 +5,8 @@ import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
+import cpw.mods.forge.serverpacklocator.ConfigException;
 import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
-import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 import cpw.mods.forge.serverpacklocator.utils.NonceUtils;
 import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
@@ -18,9 +18,11 @@ import net.neoforged.api.distmarker.Dist;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.net.Proxy;
 import java.net.URLConnection;
+import java.net.http.HttpRequest;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -35,9 +37,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Function;
 
-public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager<SecurityConfig.PublicKeyPairSecurityConfig>
+public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager
 {
     private static final Logger LOGGER = LogManager.getLogger();
     private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
@@ -240,20 +241,20 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void onClientConnectionCreation(final URLConnection connection)
+    public void onClientConnectionCreation(HttpRequest.Builder requestBuilder)
     {
         if (signingHandler == null || sessionId.compareTo(DEFAULT_NILL_UUID) == 0) {
             LOGGER.warn("No signing handler is available for the current session (Missing keypair). Stuff might not work since we can not sign the requests!");
             return;
         }
 
-        connection.setRequestProperty("Authentication", "SignedId");
-        connection.setRequestProperty("AuthenticationId", sessionId.toString());
-        connection.setRequestProperty("AuthenticationSignature", sign(sessionId, signingHandler.signer()));
-        connection.setRequestProperty("AuthenticationKey", Base64.getEncoder().encodeToString(Crypt.rsaPublicKeyToString(signingHandler.keyPair().publicKeyData().key()).getBytes(StandardCharsets.UTF_8)));
-        connection.setRequestProperty("AuthenticationKeyExpire", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().expiresAt().toString().getBytes(StandardCharsets.UTF_8)));
-        connection.setRequestProperty("AuthenticationKeyExpireDigest", sign(signingHandler.keyPair().publicKeyData().expiresAt().toString(), signingHandler.signer()));
-        connection.setRequestProperty("AuthenticationKeySignature", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().publicKeySignature()));
+        requestBuilder.header("Authentication", "SignedId");
+        requestBuilder.header("AuthenticationId", sessionId.toString());
+        requestBuilder.header("AuthenticationSignature", sign(sessionId, signingHandler.signer()));
+        requestBuilder.header("AuthenticationKey", Base64.getEncoder().encodeToString(Crypt.rsaPublicKeyToString(signingHandler.keyPair().publicKeyData().key()).getBytes(StandardCharsets.UTF_8)));
+        requestBuilder.header("AuthenticationKeyExpire", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().expiresAt().toString().getBytes(StandardCharsets.UTF_8)));
+        requestBuilder.header("AuthenticationKeyExpireDigest", sign(signingHandler.keyPair().publicKeyData().expiresAt().toString(), signingHandler.signer()));
+        requestBuilder.header("AuthenticationKeySignature", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().publicKeySignature()));
     }
 
     @Override
@@ -262,8 +263,8 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void authenticateConnection(URLConnection connection) {
-        connection.setRequestProperty("ChallengeSignature", this.challengePayload);
+    public void authenticateConnection(HttpRequest.Builder requestBuilder) {
+        requestBuilder.header("ChallengeSignature", this.challengePayload);
     }
 
     @Override
@@ -288,7 +289,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         try {
             encryptedSessionHashPayload = Base64.getDecoder().decode(authenticationSignature);
         } catch (Throwable throwable) {
-            LOGGER.warn("External client attempted to login with a signature which was not decode-able: " + authenticationSignature);
+            LOGGER.warn("External client attempted to login with a signature which was not decode-able: {}", authenticationSignature);
             return false;
         }
 
@@ -301,14 +302,14 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         try {
             decodedPublicKey = new String(Base64.getDecoder().decode(publicKeyString), StandardCharsets.UTF_8);
         } catch (Throwable throwable) {
-            LOGGER.warn("External client attempted to login with a public key which was not decode-able: " + publicKeyString);
+            LOGGER.warn("External client attempted to login with a public key which was not decode-able: {}", publicKeyString);
             return false;
         }
         final PublicKey publicKey;
         try {
             publicKey = Crypt.stringToRsaPublicKey(decodedPublicKey);
         } catch (Throwable throwable) {
-            LOGGER.warn("External client attempted to login with a public key which was not in RSA format: " + decodedPublicKey);
+            LOGGER.warn("External client attempted to login with a public key which was not in RSA format: {}", decodedPublicKey);
             return false;
         }
 
@@ -321,14 +322,14 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         try {
             decodedAuthenticationExpire = new String(Base64.getDecoder().decode(authenticationExpire), StandardCharsets.UTF_8);
         } catch (Throwable throwable) {
-            LOGGER.warn("External client attempted to login with expire information which was not decode-able: " + publicKeyString);
+            LOGGER.warn("External client attempted to login with expire information which was not decode-able: {}", publicKeyString);
             return false;
         }
         final Instant expire;
         try {
             expire = Instant.parse(decodedAuthenticationExpire);
         } catch (DateTimeParseException e) {
-            LOGGER.warn("External client attempted login without a validly formatted expire information: " + authenticationExpire);
+            LOGGER.warn("External client attempted login without a validly formatted expire information: {}", authenticationExpire);
             return false;
         }
 
@@ -342,7 +343,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         try {
             decodedAuthenticationExpireDigest = Base64.getDecoder().decode(authenticationExpireDigest);
         } catch (Throwable throwable) {
-            LOGGER.warn("External client attempted to login with expire information which was not decode-able: " + publicKeyString);
+            LOGGER.warn("External client attempted to login with expire information which was not decode-able: {}", publicKeyString);
             return false;
         }
 
@@ -355,7 +356,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         try {
             keySignature = Base64.getDecoder().decode(authenticationKeySignature);
         } catch (Throwable throwable) {
-            LOGGER.warn("External client attempted login with a key signature which was not decode-able: " + authenticationKeySignature);
+            LOGGER.warn("External client attempted login with a key signature which was not decode-able: {}", authenticationKeySignature);
             return false;
         }
 
@@ -384,7 +385,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
             challenge = currentChallenges.get(sessionId);
             if (challenge == null) {
-                LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: " + new String(challengeSignature, StandardCharsets.UTF_8));
+                LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: {}", new String(challengeSignature, StandardCharsets.UTF_8));
                 return false;
             }
         } else {
@@ -431,7 +432,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         try {
             sessionId = UUID.fromString(authenticationId);
         } catch (IllegalArgumentException e) {
-            LOGGER.warn("External client attempted login with invalid session id format: " + authenticationId);
+            LOGGER.warn("External client attempted login with invalid session id format: {}", authenticationId);
             return null;
         }
         return sessionId;
@@ -451,35 +452,13 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public Function<SecurityConfig, SecurityConfig.PublicKeyPairSecurityConfig> getConfigurationExtractor(SidedPackHandler<?> handler) {
-        return SecurityConfig::getPublicKeyPair;
-    }
-
-    @Override
-    public boolean validateConfiguration(SidedPackHandler<?> handler, SecurityConfig.PublicKeyPairSecurityConfig config) {
-        if (LaunchEnvironmentHandler.INSTANCE.getDist() == Dist.CLIENT) {
-            final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
-            if (uuid == null || uuid.isEmpty()) {
-                // invalid UUID - probably offline mode. not supported
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("NO UUID found. Offline mode does not work. No server mods will be downloaded");
-                LOGGER.error("There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.");
-                return false;
-            }
+    public void initialize(SecurityConfig config) throws ConfigException {
+        var publicKeyPair = config.getPublicKeyPair();
+        if (publicKeyPair == null) {
+            throw new ConfigException("Could not locate server public key security configuration.");
         }
 
-        final Boolean validateChallenges = config.isValidateChallenges();
-        if (validateChallenges == null) {
-            LOGGER.warn("Invalid configuration file {} found. Could not locate server public key security configuration. " +
-                    "Repair or delete this file to continue", handler.getConfigFilePath());
-            return false;
-        }
-
-        return true;
-    }
-
-    @Override
-    public void initialize(SecurityConfig.PublicKeyPairSecurityConfig publicKeyPairSecurityConfig) {
-        this.validateChallenges = publicKeyPairSecurityConfig.isValidateChallenges();
+        this.validateChallenges = publicKeyPair.isValidateChallenges();
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {
@@ -510,5 +489,19 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         {
             this(keyPair, Signer.from(keyPair.privateKey(), "SHA256withRSA"));
         }
+    }
+
+    @Nullable
+    @Override
+    public String getUnavailabilityReason() {
+        if (LaunchEnvironmentHandler.INSTANCE.getDist() == Dist.CLIENT) {
+            final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
+            if (uuid == null || uuid.isEmpty()) {
+                // invalid UUID - probably offline mode. not supported
+                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("NO UUID found. Offline mode does not work. No server mods will be downloaded");
+                return "There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.";
+            }
+        }
+        return null;
     }
 }

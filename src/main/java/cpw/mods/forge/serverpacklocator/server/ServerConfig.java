@@ -6,6 +6,7 @@ import com.electronwill.nightconfig.core.conversion.SpecEnum;
 import com.electronwill.nightconfig.core.conversion.SpecIntInRange;
 import com.electronwill.nightconfig.core.conversion.SpecNotNull;
 import cpw.mods.forge.serverpacklocator.secure.SecurityConfig;
+import cpw.mods.forge.serverpacklocator.secure.SecurityConfigHolder;
 import cpw.mods.forge.serverpacklocator.utils.ObjectUtils;
 import cpw.mods.forge.serverpacklocator.utils.SyncType;
 
@@ -13,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class ServerConfig {
+public class ServerConfig implements SecurityConfigHolder {
 
     public static final class Default {
 
@@ -59,6 +60,7 @@ public class ServerConfig {
         return server;
     }
 
+    @Override
     public SecurityConfig getSecurity() {
         return security;
     }

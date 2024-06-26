@@ -59,7 +59,7 @@ jobs:
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         with:
           tag_name: v${{ steps.get_version.outputs.version }}
-          files: build/SPL-*.jar
+          files: build/libs/SPL-*.jar
           make_latest: true
           fail_on_unmatched_files: true
           generate_release_notes: true

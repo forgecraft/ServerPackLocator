@@ -52,7 +52,7 @@ public class PackLocator implements IModFileCandidateLocator {
         }
 
         LOGGER.info("Unpacking utility mod.");
-        try (var in = getClass().getResourceAsStream("/SPL-utilmod.embeddedjar")) {
+        try (var in = getClass().getResourceAsStream("/SPL-utilmod.embedded")) {
             if (in == null) {
                 LOGGER.error("Failed to find the utility mod in the server pack locator jar. This is okay if you are running in dev!");
             } else {

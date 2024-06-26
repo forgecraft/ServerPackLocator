@@ -56,7 +56,7 @@ public class ServerFileManager {
         exposedContent.forEach((content) -> {
             final Path contentPath = serverPath.resolve(content.getDirectory().getPath());
 
-            contentPath.toFile().getParentFile().mkdirs();
+            contentPath.toFile().mkdirs();
 
             final List<Path> files = new ArrayList<>();
             try (Stream<Path> walk = Files.list(contentPath)) {

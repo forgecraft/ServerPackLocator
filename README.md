@@ -43,9 +43,9 @@ A default file will be created when you run the mod for the first time.
 
 SPL opens a port to listen for HTTP connections. You can change this port in the configuration file.
 
-```
+```toml
 [server]
-	port = 8080
+port = 8080
 ```
 
 ### Exposing Content
@@ -53,27 +53,27 @@ SPL opens a port to listen for HTTP connections. You can change this port in the
 You also configure which directories to send to the client, and whether local changes by clients will be overwritten
 or not. Any directory you add here will automatically be scanned for mods on the client-side.
 
-```
+```toml
 [[server.exposedServerContent]]
-    name = "servermods"
-    syncType = "LOADED_SERVER"
+name = "servermods"
+syncType = "LOADED_SERVER"
 
 [server.exposedServerContent.directory]
-    path = "servermods"
+path = "servermods"
         
 [[server.exposedServerContent]]
-    name = "clientmods"
-    syncType = "LOADED_CLIENT"
+name = "clientmods"
+syncType = "LOADED_CLIENT"
 
 [server.exposedServerContent.directory]
-    path = "clientmods"
+path = "clientmods"
         
 [[server.exposedServerContent]]
-    name = "config"
-    syncType = "FORCED_SYNC"
+name = "config"
+syncType = "FORCED_SYNC"
 
 [server.exposedServerContent.directory]
-    path = "config"
+path = "config"
 ```
 
 Available sync types:
@@ -94,7 +94,7 @@ A default file will be created when you run the mod for the first time.
 
 The server to download packs from has to be configured on the client:
 
-```
+```toml
 [client]
 remoteServer = "http://localhost:8080/"
 ```
@@ -103,7 +103,7 @@ remoteServer = "http://localhost:8080/"
 
 The number of concurrent downloads can also be configured.
 
-```
+```toml
 [client]
 threadCount = 22
 ```
@@ -115,7 +115,7 @@ The client can be configured to ignore content sent by the server as follows.
 The `name` attribute must match the `name` of the servercontent section, not necessarily the name of the directory
 on disk.
 
-```
+```toml
 [client]
 downloadedServerContent = [{ name = "servermods", blackListRegex=["FilenameRegExp.*", "OtherFilenameRegexp.*"]}]
 ```

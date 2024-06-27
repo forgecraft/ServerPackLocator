@@ -29,13 +29,13 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         if (Objects.equals(HttpMethod.GET, msg.method())) {
             handleGet(ctx, msg);
         } else {
-            buildReply(ctx, msg, HttpResponseStatus.BAD_REQUEST, "text/plain", "Bad request");
+            buildReply(ctx, msg, HttpResponseStatus.METHOD_NOT_ALLOWED, "text/plain", "Method not allowed");
         }
     }
     private void handleGet(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
         if (!msg.headers().contains("Authentication")) {
             LOGGER.warn("Received unauthenticated request.");
-            build404(ctx, msg);
+            build401(ctx, msg);
             return;
         }
 
@@ -89,6 +89,10 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     private void build404(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
         buildReply(ctx, msg, HttpResponseStatus.NOT_FOUND, "text/plain", "Not Found");
+    }
+
+    private void build401(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
+        buildReply(ctx, msg, HttpResponseStatus.UNAUTHORIZED, "text/plain", "Unauthorized");
     }
 
     private void buildReply(final ChannelHandlerContext ctx, final FullHttpRequest msg, final HttpResponseStatus status, final String contentType, final String message) {

@@ -1,8 +1,8 @@
 
 plugins {
     id 'maven-publish'
-    id 'java-library'
     id 'net.neoforged.gradleutils'
+    id 'net.neoforged.moddev'
     id 'io.github.goooler.shadow'
 }
 
@@ -19,6 +19,30 @@ version = gradleutils.version.toString()
 
 group = 'cpw.mods.forge'
 
+neoForge {
+    version = project.neoforgeVersion
+
+    mods {
+        utilmod {
+            modSourceSets = [sourceSets.main]
+        }
+    }
+
+    runs {
+        client {
+            client()
+            gameDirectory = file("runs/client")
+            programArgument "--launch_target"
+            programArgument "cpw.mods.bootstraplauncher.BootstrapLauncher"
+            mainClass = "net.covers1624.devlogin.DevLogin"
+        }
+        server {
+            server()
+            gameDirectory = file("runs/server")
+        }
+    }
+}
+
 configurations {
     utilMod {
         canBeResolved = true
@@ -32,6 +56,8 @@ configurations {
         canBeConsumed = true
         extendsFrom shadow
     }
+    clientAdditionalRuntimeClasspath.extendsFrom shadow
+    serverAdditionalRuntimeClasspath.extendsFrom shadow
 }
 
 def copyUtilMod = tasks.register("copyUtilMod", Copy) {
@@ -70,21 +96,13 @@ shadowJar {
 }
 
 dependencies {
-    implementation("net.neoforged.fancymodloader:loader:4.0.11")
-
-    implementation("com.google.code.gson:gson:2.10.1")
-    implementation("com.mojang:authlib:6.0.52")
-    implementation("org.apache.logging.log4j:log4j-api:2.19.0")
-    implementation("io.netty:netty-codec-http:4.1.97.Final")
     shadow("io.netty:netty-codec-http:4.1.97.Final") {
         transitive = false
     }
-    implementation("com.electronwill.night-config:core:3.6.4")
-    implementation("com.electronwill.night-config:toml:3.6.4")
     shadow("com.electronwill.night-config:json:3.6.4") {
         transitive = false
     }
-    implementation('org.apache.maven:maven-artifact:3.9.6')
+    runtimeOnly "net.covers1624:DevLogin:0.1.0.4"
 }
 
 assemble.dependsOn shadowJar

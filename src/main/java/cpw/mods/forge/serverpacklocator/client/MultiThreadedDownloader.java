@@ -27,7 +27,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -163,7 +162,13 @@ public class MultiThreadedDownloader {
             this.connectionSecurityManager.authenticateConnection(requestBuilder);
         }
         var request = requestBuilder.build();
-        return httpClient.sendAsync(request, bodyHandler);
+        return httpClient.sendAsync(request, bodyHandler)
+                .thenApply(response -> {
+                    if (response.statusCode() != 200) {
+                        throw new RuntimeException("Got HTTP Status Code " + response.statusCode() + " for " + requestUri);
+                    }
+                    return response;
+                });
     }
 
     private static URI joinUrl(String baseUrl, String path) {

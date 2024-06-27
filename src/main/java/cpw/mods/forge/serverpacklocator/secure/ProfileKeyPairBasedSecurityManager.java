@@ -54,7 +54,6 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private final SigningHandler signingHandler;
     private final UUID sessionId;
     private final SignatureValidator validator;
-    private boolean validateChallenges = true;
 
     private String challengePayload = "";
 
@@ -376,7 +375,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 return false;
             }
             try {
-                challengeValidationRequired = this.validateChallenges;
+                challengeValidationRequired = true;
                 challengeSignature = Base64.getDecoder().decode(challengeSignatureHeader);
             } catch (Throwable throwable) {
                 LOGGER.warn("External client attempted login with a challenge signature which was not decode-able.");
@@ -452,13 +451,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void initialize(SecurityConfig config) throws ConfigException {
-        var publicKeyPair = config.getPublicKeyPair();
-        if (publicKeyPair == null) {
-            throw new ConfigException("Could not locate server public key security configuration.");
-        }
-
-        this.validateChallenges = publicKeyPair.isValidateChallenges();
+    public void initialize(SecurityConfig config) {
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

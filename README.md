@@ -99,15 +99,6 @@ The server to download packs from has to be configured on the client:
 remoteServer = "http://localhost:8080/"
 ```
 
-### Concurrent Downloads
-
-The number of concurrent downloads can also be configured.
-
-```toml
-[client]
-threadCount = 22
-```
-
 ### Ignoring Server Content
 
 The client can be configured to ignore content sent by the server as follows.

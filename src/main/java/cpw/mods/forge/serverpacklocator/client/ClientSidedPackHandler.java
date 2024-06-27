@@ -4,6 +4,7 @@ import cpw.mods.forge.serverpacklocator.ConfigException;
 import cpw.mods.forge.serverpacklocator.SidedPackHandler;
 
 import java.io.File;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
@@ -46,14 +47,14 @@ public class ClientSidedPackHandler extends SidedPackHandler<ClientConfig> {
     }
 
     @Override
-    public List<File> getModFolders() {
-        clientDownloader.download();
+    public List<File> getModFolders() throws InterruptedException, IOException {
+        var manifest = clientDownloader.download();
 
-        return clientDownloader.manifest()
-                .getDirectories()
+        return manifest
+                .directories()
                 .stream()
-                .filter(e -> e.getSyncType().loadOnClient())
-                .map(c -> getGameDir().resolve(c.getTargetPath()).toFile())
+                .filter(e -> e.syncType().loadOnClient())
+                .map(c -> getGameDir().resolve(c.targetPath()).toFile())
                 .toList();
     }
 }

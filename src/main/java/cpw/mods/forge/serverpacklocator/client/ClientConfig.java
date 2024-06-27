@@ -17,7 +17,6 @@ public class ClientConfig implements SecurityConfigHolder {
                 new Client(),
                 c -> {
                     c.remoteServer = "http://localhost:8080/";
-                    c.threadCount = Math.max(1, Runtime.getRuntime().availableProcessors() - 2);
                 }
         );
 
@@ -48,17 +47,10 @@ public class ClientConfig implements SecurityConfigHolder {
 
     public static class Client {
 
-        @SpecIntInRange(min = 1, max = 128)
-        private int threadCount;
-
         private String remoteServer;
 
         @SpecNotNull
         private List<DownloadedServerContent> downloadedServerContent = new ArrayList<>();
-
-        public int getThreadCount() {
-            return threadCount;
-        }
 
         public String getRemoteServer() {
             return remoteServer;

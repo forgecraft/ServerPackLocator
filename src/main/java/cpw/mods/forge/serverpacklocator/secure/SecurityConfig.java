@@ -14,17 +14,11 @@ public class SecurityConfig {
                 c -> c.password = "!!CHANGEME_WHEN_USING_PASSWORD_MODE!!"
         );
 
-        private static final PublicKeyPairSecurityConfig PUBLICKEY_SECURITY_CONFIG = ObjectUtils.make(
-                new PublicKeyPairSecurityConfig(),
-                c -> c.validateChallenges = true
-        );
-
         public static final SecurityConfig INSTANCE = ObjectUtils.make(
                 new SecurityConfig(),
                 c -> {
                     c.type = SecurityType.PUBLICKEY;
                     c.password = PASSWORD_SECURITY_CONFIG;
-                    c.publicKeyPair = PUBLICKEY_SECURITY_CONFIG;
                 }
         );
     }
@@ -32,7 +26,6 @@ public class SecurityConfig {
     @SpecEnum(method = EnumGetMethod.NAME_IGNORECASE)
     private SecurityType type;
     private PasswordSecurityConfig password;
-    private PublicKeyPairSecurityConfig publicKeyPair;
 
     public SecurityType getType() {
         return type;
@@ -42,26 +35,12 @@ public class SecurityConfig {
         return password;
     }
 
-    public PublicKeyPairSecurityConfig getPublicKeyPair() {
-        return publicKeyPair;
-    }
-
     public static class PasswordSecurityConfig {
         @SpecNotNull
         private String password;
 
         public String getPassword() {
             return password;
-        }
-
-    }
-
-    public static class PublicKeyPairSecurityConfig {
-        @SpecNotNull
-        private boolean validateChallenges;
-
-        public boolean isValidateChallenges() {
-            return validateChallenges;
         }
 
     }

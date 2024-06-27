@@ -17,14 +17,21 @@ gradleutils {
 
 version = gradleutils.version.toString()
 
-group = 'cpw.mods.forge'
+group = 'net.forgecraft.serverpacklocator'
+
+sourceSets {
+    utilmod
+}
 
 neoForge {
     version = project.neoforgeVersion
 
     mods {
-        utilmod {
+        spl {
             modSourceSets = [sourceSets.main]
+        }
+        utilmod {
+            modSourceSets = [sourceSets.utilmod]
         }
     }
 
@@ -44,24 +51,20 @@ neoForge {
 }
 
 configurations {
-    utilMod {
-        canBeResolved = true
-        canBeConsumed = false
-        transitive = false
-        withDependencies {
-            it.add(dependencyFactory.create(project(":utilmod")))
-        }
-    }
-    shadowedLibraryElements {
-        canBeConsumed = true
-        extendsFrom shadow
-    }
     clientAdditionalRuntimeClasspath.extendsFrom shadow
     serverAdditionalRuntimeClasspath.extendsFrom shadow
+
+    // The util-mod uses code from SPL
+    utilmodCompileClasspath.extendsFrom compileClasspath
+}
+
+def jarUtilMod = tasks.register(sourceSets.utilmod.jarTaskName, Jar) {
+    archiveBaseName = "SPL-utilmod"
+    from(sourceSets.utilmod.output)
 }
 
 def copyUtilMod = tasks.register("copyUtilMod", Copy) {
-    from(configurations.utilMod)
+    from(jarUtilMod)
     into(layout.buildDirectory.dir("generated/splUtilMod"))
     rename {
         // The shadow plugin says we should rename this to not have a .jar ending
@@ -89,10 +92,10 @@ shadowJar {
     archiveClassifier = ""
     from(copyUtilMod)
     configurations = [project.configurations.shadow]
-    relocate 'io.netty.handler.codec.http', 'shadow.io.netty.handler.codec.http'
-    relocate 'io.netty.handler.codec.rtsp', 'shadow.io.netty.handler.codec.rtsp'
-    relocate 'io.netty.handler.codec.spdy', 'shadow.io.netty.handler.codec.spdy'
-    relocate 'com.electronwill.nightconfig.json', 'shadow.com.electronwill.nightconfig.json'
+    relocate 'io.netty.handler.codec.http', 'net.forgecraft.serverpacklocator.shadow.io.netty.handler.codec.http'
+    relocate 'io.netty.handler.codec.rtsp', 'net.forgecraft.serverpacklocator.shadow.io.netty.handler.codec.rtsp'
+    relocate 'io.netty.handler.codec.spdy', 'net.forgecraft.serverpacklocator.shadow.io.netty.handler.codec.spdy'
+    relocate 'com.electronwill.nightconfig.json', 'net.forgecraft.serverpacklocator.shadow.com.electronwill.nightconfig.json'
 }
 
 dependencies {
@@ -103,6 +106,9 @@ dependencies {
         transitive = false
     }
     runtimeOnly "net.covers1624:DevLogin:0.1.0.4"
+
+    utilmodCompileOnly sourceSets.main.output
+    runtimeOnly sourceSets.utilmod.output
 }
 
 assemble.dependsOn shadowJar

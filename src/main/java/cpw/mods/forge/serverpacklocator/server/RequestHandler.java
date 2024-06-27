@@ -1,5 +1,6 @@
 package cpw.mods.forge.serverpacklocator.server;
 
+import cpw.mods.forge.serverpacklocator.ModAccessor;
 import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -41,7 +42,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
         if (!this.connectionSecurityManager.onServerConnectionRequest(ctx, msg)) {
             LOGGER.warn("Received unauthorized request.");
-            build404(ctx, msg);
+            build401(ctx, msg);
             return;
         }
 
@@ -69,6 +70,10 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     private String determineClientIp(final ChannelHandlerContext ctx, final FullHttpRequest msg)
     {
+        if (!ModAccessor.isLogIps()) {
+            return "[IP hidden]";
+        }
+
         if (msg.headers().contains("X-Forwarded-For"))
             return String.join(" via ", msg.headers().getAll("X-Forwarded-For")) + " (using Remote Address: " + ctx.channel().remoteAddress().toString() + ")";
 

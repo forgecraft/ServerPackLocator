@@ -13,6 +13,7 @@ import cpw.mods.forge.serverpacklocator.secure.SecurityConfigHolder;
 
 import javax.annotation.Nullable;
 import java.io.File;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Supplier;
@@ -66,7 +67,7 @@ public abstract class SidedPackHandler<TConfig extends SecurityConfigHolder> {
         return gameDir;
     }
 
-    public abstract List<File> getModFolders();
+    public abstract List<File> getModFolders() throws InterruptedException, IOException;
 
     @Nullable
     public String getUnavailabilityReason() {

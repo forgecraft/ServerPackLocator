@@ -19,7 +19,7 @@ public final class WhitelistVerificationHelper
     private WhitelistVerificationHelper()
     {
     }
-    public boolean isAllowed(final UUID sessionId) {
-        return !ModAccessor.getIsWhiteListEnabled().get().join() || ModAccessor.getIsWhiteListed().apply(sessionId).join();
+    public boolean isAllowed(UUID sessionId) {
+        return ModAccessor.isWhiteListed(sessionId);
     }
 }

@@ -1,18 +1,17 @@
 package cpw.mods.forge.serverpacklocator.client;
 
 import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
-import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
 import cpw.mods.forge.serverpacklocator.ServerManifest;
 import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
 import net.neoforged.fml.loading.ImmediateWindowHandler;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
+import org.apache.commons.lang3.mutable.MutableLong;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -24,14 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -39,7 +31,6 @@ import java.util.stream.Collectors;
 public class MultiThreadedDownloader {
     private static final Logger LOGGER = LogManager.getLogger();
 
-    private final Executor executor;
     private final ClientSidedPackHandler clientSidedPackHandler;
     private final IConnectionSecurityManager connectionSecurityManager;
     private final HttpClient httpClient;
@@ -49,27 +40,19 @@ public class MultiThreadedDownloader {
             final ClientSidedPackHandler packHandler,
             final IConnectionSecurityManager connectionSecurityManager
     ) {
-        this.executor = Executors.newFixedThreadPool(
-                Math.min(Math.max(1, Runtime.getRuntime().availableProcessors() - 2), packHandler.getConfig().getClient().getThreadCount())
-        );
-        this.httpClient = HttpClient.newBuilder().executor(executor).build();
+        this.httpClient = HttpClient.newHttpClient();
         this.clientSidedPackHandler = packHandler;
         this.connectionSecurityManager = connectionSecurityManager;
         remoteServer = clientSidedPackHandler.getConfig().getClient().getRemoteServer();
     }
 
-    private CompletableFuture<Void> authenticate() {
-        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Authenticating to: " + remoteServer);
-
-        return makeRequest("authenticate", false, HttpResponse.BodyHandlers.discarding())
-                .thenAccept(response -> {
-                    var challenge = response.headers().firstValue("Challenge").orElse(null);
-                    if (challenge == null) {
-                        throw new RuntimeException("Did not receive a challenge from the server.");
-                    }
-                    processChallengeString(challenge);
-                    LOGGER.debug("Received challenge");
-                });
+    private void authenticate() throws IOException, InterruptedException {
+        var progressBar = StartupNotificationManager.addProgressBar("SPL is authenticating...", 1);
+        try {
+            makeRequest("authenticate", false, HttpResponse.BodyHandlers.discarding());
+        } finally {
+            progressBar.complete();
+        }
     }
 
     private void processChallengeString(String challengeStr) {
@@ -78,12 +61,12 @@ public class MultiThreadedDownloader {
         this.connectionSecurityManager.onAuthenticateComplete(new String(challenge, StandardCharsets.UTF_8));
     }
 
-    private CompletableFuture<PreparedServerDownloadData> downloadManifest() {
-        return authenticate().thenCompose(ignored -> {
-            LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Requesting server manifest...");
+    private PreparedServerDownloadData downloadManifest() throws IOException, InterruptedException {
+        authenticate();
+        var progressBar = StartupNotificationManager.addProgressBar("Requesting server manifest...", 1);
+        try {
+            var response = makeRequest("servermanifest.json", true, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
 
-            return makeRequest("servermanifest.json", true, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        }).thenApply(response -> {
             response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
 
             var serverManifest = ServerManifest.fromString(response.body());
@@ -93,68 +76,16 @@ public class MultiThreadedDownloader {
                     serverManifest,
                     clientSidedPackHandler.getConfig().getClient().getDownloadedServerContent()
             );
-        });
+        } finally {
+            progressBar.increment();
+            progressBar.complete();
+        }
     }
 
-    private CompletableFuture<Void> downloadFile(final ServerManifest.DirectoryServerData nextDirectory, final ServerManifest.FileData next) {
-        var rootDir = clientSidedPackHandler.getGameDir();
-        var outputDir = rootDir.resolve(nextDirectory.getPath());
-        var filePath = outputDir.resolve(next.getFileName());
-        final String existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
-        if (Objects.equals(next.getChecksum(), existingChecksum)) {
-            LOGGER.debug("Found existing file {} - skipping", next.getFileName());
-            return CompletableFuture.completedFuture(null);
-        }
-
-        if (existingChecksum != null && !nextDirectory.getSyncType().forceSync()) {
-            LOGGER.warn("Found existing file {} with different checksum - file is not forced synced - skipping", next.getFileName());
-            return CompletableFuture.completedFuture(null);
-        }
-
-        final String nextFile = rootDir.relativize(filePath).toString().replace("\\", "/");
-        LOGGER.info("Requesting file {}", nextFile);
-        LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloading " + nextFile);
-        var path = "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
-
-        return makeRequest(path, true, HttpResponse.BodyHandlers.ofInputStream())
-                .thenApply(response -> {
-                    File file = filePath.toFile();
-                    file.getParentFile().mkdirs();
-
-                    response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
-
-                    var totalBytes = response.headers().firstValueAsLong("Content-Length").orElse(0L);
-                    long time = System.nanoTime(), between, length;
-                    int percent;
-
-                    try (var outputStream = new FileOutputStream(file); var download = outputStream.getChannel();
-                         ReadableByteChannel channel = Channels.newChannel(response.body())) {
-                        while (download.transferFrom(channel, file.length(), 8192) > 0) {
-                            between = System.nanoTime() - time;
-
-                            if (between < 1000000000) continue;
-
-                            length = file.length();
-
-                            percent = (int) ((double) length / ((double) totalBytes == 0.0 ? 1.0 : (double) totalBytes) * 100.0);
-
-                            LOGGER.info("Downloaded {}% of {}", percent, nextFile);
-                            LaunchEnvironmentHandler.INSTANCE.addProgressMessage("Downloaded " + percent + "% of " + nextFile);
-
-                            time = System.nanoTime();
-                        }
-                    } catch (IOException e) {
-                        throw new RuntimeException("Download of " + path + " failed: " + e, e);
-                    }
-                    return null;
-                });
-    }
-
-    private <T> CompletableFuture<HttpResponse<T>> makeRequest(String path, boolean authenticated, HttpResponse.BodyHandler<T> bodyHandler) {
+    private <T> HttpResponse<T> makeRequest(String path, boolean authenticated, HttpResponse.BodyHandler<T> bodyHandler) throws IOException, InterruptedException {
         var requestUri = joinUrl(remoteServer, path);
 
         LOGGER.info("ServerPackLocator is requesting {}...", requestUri);
-        StartupNotificationManager.addModMessage("SPL is requesting " + requestUri);
 
         var requestBuilder = HttpRequest.newBuilder(requestUri);
         this.connectionSecurityManager.onClientConnectionCreation(requestBuilder);
@@ -162,13 +93,12 @@ public class MultiThreadedDownloader {
             this.connectionSecurityManager.authenticateConnection(requestBuilder);
         }
         var request = requestBuilder.build();
-        return httpClient.sendAsync(request, bodyHandler)
-                .thenApply(response -> {
-                    if (response.statusCode() != 200) {
-                        throw new RuntimeException("Got HTTP Status Code " + response.statusCode() + " for " + requestUri);
-                    }
-                    return response;
-                });
+        var response = httpClient.send(request, bodyHandler);
+        response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
+        if (response.statusCode() != 200) {
+            throw new IOException("Got HTTP Status Code " + response.statusCode() + " for " + requestUri);
+        }
+        return response;
     }
 
     private static URI joinUrl(String baseUrl, String path) {
@@ -182,69 +112,133 @@ public class MultiThreadedDownloader {
         return URI.create(baseUrl + path);
     }
 
-    public void download() {
-        var progressBar = StartupNotificationManager.addProgressBar("Downloading server pack", 0);
+    public ServerManifest download() throws IOException, InterruptedException {
+        var preparedManifest = downloadManifest();
 
-        CompletableFuture<Void> downloadTask = downloadManifest()
-                .thenCompose(preparedManifest -> {
-                    final ServerManifest manifest = preparedManifest.manifest();
-                    final List<CompletableFuture<Void>> downloads = new ArrayList<>();
+        var filesToDownload = getFilesToDownload(preparedManifest);
 
-                    final Map<String, ClientConfig.DownloadedServerContent> lookup = preparedManifest.directoryContent()
-                            .stream()
-                            .collect(Collectors.toMap(ClientConfig.DownloadedServerContent::getName, Function.identity()));
+        if (!filesToDownload.isEmpty()) {
+            // We measure this in kiB to avoid overflow
+            var overallSize = filesToDownload.stream().mapToLong(FileToDownload::size).sum();
+            LOGGER.info("Downloading {} server pack files ({} byte)", filesToDownload.size(), overallSize);
 
-                    if (manifest.getDirectories() != null) {
-                        manifest.getDirectories().forEach(directory -> {
-                            List<Pattern> directoryBlacklist =
-                                    lookup.get(directory.getName()) == null ? List.of() :
-                                            lookup.get(directory.getName()).getBlackListRegex().stream()
-                                                    .map(Pattern::compile)
-                                                    .toList();
+            var progressBar = StartupNotificationManager.addProgressBar("Downloading...", toDownloadProgress(overallSize));
+            try {
 
-                            if (directory.getFileData() != null) {
-                                directory.getFileData().forEach(fileData -> {
-                                    if (directoryBlacklist.stream().anyMatch(p -> p.matcher(fileData.getFileName()).matches())) {
-                                        LOGGER.info("Skipping blacklisted file {}", fileData.getFileName());
-                                        return;
-                                    }
-                                    downloads.add(downloadFile(directory, fileData));
-                                });
-                            }
-                        });
-                    }
-
-                    return CompletableFuture.allOf(downloads.toArray(new CompletableFuture[0]));
-                });
-
-        try {
-            while (true) {
-                try {
-                    downloadTask.get(50, TimeUnit.MILLISECONDS);
-                    break;
-                } catch (TimeoutException ignored) {
-                    // Not done yet! Update progress UI
-                    ImmediateWindowHandler.renderTick();
+                var bytesDownloaded = 0L;
+                for (var fileToDownload : filesToDownload) {
+                    var bytesDownloadedAtStartOfFile = bytesDownloaded;
+                    progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile));
+                    MutableLong lastRenderTick = new MutableLong(System.currentTimeMillis());
+                    progressBar.label("Downloading " + fileToDownload.localFile.getName() + "...");
+                    downloadFile(fileToDownload, (downloaded, total) -> {
+                        progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile + downloaded));
+                        if (System.currentTimeMillis() - lastRenderTick.getValue() >= 50L) {
+                            ImmediateWindowHandler.renderTick();
+                            lastRenderTick.setValue(System.currentTimeMillis());
+                        }
+                    });
+                    // The original estimate was based on this, and the progress bar should reflect it
+                    // even if the server sent a different size
+                    bytesDownloaded += fileToDownload.size;
                 }
+
+            } finally {
+                progressBar.complete();
             }
-        } catch (ExecutionException e) {
-            if (e.getCause() instanceof IOException ioException) {
-                throw new UncheckedIOException(ioException);
-            } else if (e.getCause() instanceof RuntimeException runtimeException) {
-                throw runtimeException;
-            } else {
-                throw new RuntimeException(e.getCause());
+        }
+
+        return preparedManifest.manifest();
+    }
+
+    // the progress bar only supports 32-bit, so we convert to kib to avoid overflow if pack is >2GB
+    private int toDownloadProgress(long bytes) {
+        return (int) (bytes / 1024);
+    }
+
+    private List<FileToDownload> getFilesToDownload(PreparedServerDownloadData preparedManifest) {
+        var manifest = preparedManifest.manifest();
+
+        var lookup = preparedManifest.directoryContent()
+                .stream()
+                .collect(Collectors.toMap(ClientConfig.DownloadedServerContent::getName, Function.identity()));
+
+        var filesToDownload = new ArrayList<FileToDownload>();
+
+        // Determine which files to download
+        for (var directory : manifest.directories()) {
+            List<Pattern> directoryBlacklist =
+                    lookup.get(directory.name()) == null ? List.of() :
+                            lookup.get(directory.name()).getBlackListRegex().stream()
+                                    .map(Pattern::compile)
+                                    .toList();
+
+            for (var fileData : directory.fileData()) {
+                if (directoryBlacklist.stream().anyMatch(p -> p.matcher(fileData.relativePath()).matches())) {
+                    LOGGER.info("Skipping blacklisted file {}", fileData.relativePath());
+                    continue;
+                }
+
+                var rootDir = clientSidedPackHandler.getGameDir();
+                var outputDir = rootDir.resolve(directory.path());
+                var filePath = outputDir.resolve(fileData.relativePath());
+                final String existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
+                if (Objects.equals(fileData.checksum(), existingChecksum)) {
+                    LOGGER.debug("Found existing file {} - skipping", fileData.relativePath());
+                    continue;
+                }
+
+                if (existingChecksum != null && !directory.syncType().forceSync()) {
+                    LOGGER.warn("Found existing file {} with different checksum - file is not forced synced - skipping", fileData.relativePath());
+                    continue;
+                }
+
+                var relativeUrl = rootDir.relativize(filePath).toString().replace("\\", "/");
+                filesToDownload.add(new FileToDownload(relativeUrl, filePath.toFile(), fileData.size(), fileData.checksum()));
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-        } finally {
-            progressBar.complete();
+        }
+
+        return filesToDownload;
+    }
+
+    private void downloadFile(FileToDownload fileToDownload, ProgressListener progressListener) throws IOException, InterruptedException {
+        var nextFile = fileToDownload.relativeUrl();
+
+        LOGGER.info("Requesting file {}", nextFile);
+        var path = "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
+
+        var response = makeRequest(path, true, HttpResponse.BodyHandlers.ofInputStream());
+
+        File file = fileToDownload.localFile();
+        file.getParentFile().mkdirs();
+
+        response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
+
+        var totalBytes = response.headers().firstValueAsLong("Content-Length").orElse(fileToDownload.size());
+
+        try (var outputStream = new FileOutputStream(file); var download = outputStream.getChannel();
+             ReadableByteChannel channel = Channels.newChannel(response.body())) {
+            while ((download.transferFrom(channel, file.length(), 8192)) > 0) {
+                progressListener.onProgress(file.length(), totalBytes);
+            }
+        } catch (IOException e) {
+            // Re-wrap the IO exception to give information about which path failed
+            throw new IOException("Download of " + path + " failed: " + e, e);
+        }
+
+        // Validate that the downloaded file actually matches the expected checksum
+        var downloadChecksum = FileChecksumValidator.computeChecksumFor(file.toPath());
+        if (!Objects.equals(downloadChecksum, fileToDownload.checksum)) {
+            throw new IOException("Downloaded file has checksum " + downloadChecksum + " but expected " + fileToDownload.checksum);
         }
     }
 
-    public ServerManifest manifest() {
-        return downloadManifest().join().manifest();
+    @FunctionalInterface
+    interface ProgressListener {
+        void onProgress(long downloaded, long expectedSize);
+    }
+
+    record FileToDownload(String relativeUrl, File localFile, long size, String checksum) {
     }
 
     public record PreparedServerDownloadData(ServerManifest manifest,

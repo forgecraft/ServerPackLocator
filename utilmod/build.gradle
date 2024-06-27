@@ -17,7 +17,6 @@ neoForge {
     version = project.neoforgeVersion
 }
 
-
 dependencies {
     implementation project(':')
 }

@@ -9,12 +9,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 public class ServerFileManager {
@@ -26,8 +23,12 @@ public class ServerFileManager {
 
     ServerFileManager(ServerSidedPackHandler packHandler, final List<ServerConfig.ExposedServerContent> exposedContent) {
         this.serverSidedPackHandler = packHandler;
-        this.manifest = GenerateManifest(packHandler, exposedContent);
-        this.exposedFiles = CalculateExposedFiles(manifest);
+        try {
+            this.manifest = generateManifest(packHandler, exposedContent);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to generate the server manifest.", e);
+        }
+        this.exposedFiles = getExposedFiles(manifest);
     }
 
     public ServerManifest getManifest() {
@@ -48,57 +49,55 @@ public class ServerFileManager {
         }
     }
 
-    private static ServerManifest GenerateManifest(final ServerSidedPackHandler serverSidedPackHandler, final List<ServerConfig.ExposedServerContent> exposedContent) {
+    private static ServerManifest generateManifest(ServerSidedPackHandler serverSidedPackHandler, List<ServerConfig.ExposedServerContent> exposedContent) throws IOException {
         LOGGER.debug("Generating manifest");
-        final ServerManifest.ServerManifestBuilder builder = new ServerManifest.ServerManifestBuilder();
 
-        final Path serverPath = serverSidedPackHandler.getGameDir();
-        exposedContent.forEach((content) -> {
-            final Path contentPath = serverPath.resolve(content.getDirectory().getPath());
+        var directories = new ArrayList<ServerManifest.DirectoryServerData>();
 
-            contentPath.toFile().mkdirs();
+        var serverPath = serverSidedPackHandler.getGameDir();
+        for (var content : exposedContent) {
+            var contentPath = serverPath.resolve(content.getDirectory().getPath());
+            Files.createDirectories(contentPath);
 
-            final List<Path> files = new ArrayList<>();
+            var files = new ArrayList<Path>();
             try (Stream<Path> walk = Files.list(contentPath)) {
-                walk
-                    .filter(Files::isRegularFile)
-                    .forEach(path -> {
-                        files.add(contentPath.relativize(path));
-                    });
-            } catch (IOException e) {
-                LOGGER.error("Failed to walk directory {} for content selection", contentPath, e);
-                return;
+                walk.filter(Files::isRegularFile)
+                        .forEach(path -> files.add(contentPath.relativize(path)));
             }
 
-            if (!files.isEmpty()) {
-                builder.withDirectory(dirBuilder -> {
-                    dirBuilder.setName(content.getName());
-                    dirBuilder.setPath(content.getDirectory().getPath());
-                    dirBuilder.setTargetPath(content.getDirectory().getTargetPath());
-                    dirBuilder.setSyncType(content.getSyncType());
-
-                    files.forEach(relativePath -> {
-                        final Path fullPath = contentPath.resolve(relativePath);
-                        dirBuilder.withFileData(fileBuilder -> {
-                            fileBuilder.setFileName(relativePath.toString());
-                            fileBuilder.setChecksum(FileChecksumValidator.computeChecksumFor(fullPath));
-                        });
-                    });
-                });
-            } else {
+            if (files.isEmpty()) {
                 LOGGER.warn("No files found in directory {} for content selection", contentPath);
+                continue; // Skip empty directories
             }
-        });
 
-        return builder.createServerManifest();
+            var fileData = new ArrayList<ServerManifest.FileData>(files.size());
+            for (var relativePath : files) {
+                var fullPath = contentPath.resolve(relativePath);
+                fileData.add(new ServerManifest.FileData(
+                        relativePath.toString(),
+                        Files.size(fullPath),
+                        FileChecksumValidator.computeChecksumFor(fullPath)
+                ));
+            }
+
+            directories.add(new ServerManifest.DirectoryServerData(
+                    content.getName(),
+                    content.getDirectory().getPath(),
+                    content.getDirectory().getTargetPath(),
+                    fileData,
+                    content.getSyncType()
+            ));
+        }
+
+        return new ServerManifest(directories);
     }
 
-    private static Set<String> CalculateExposedFiles(final ServerManifest manifest) {
+    private static Set<String> getExposedFiles(final ServerManifest manifest) {
         final ConcurrentHashMap<String, Boolean> exposedFiles = new ConcurrentHashMap<>();
 
-        for (ServerManifest.DirectoryServerData directory : manifest.getDirectories()) {
-            for (ServerManifest.FileData file : directory.getFileData()) {
-                final String fileName = directory.getPath() + "/" + file.getFileName();
+        for (ServerManifest.DirectoryServerData directory : manifest.directories()) {
+            for (ServerManifest.FileData file : directory.fileData()) {
+                final String fileName = directory.path() + "/" + file.relativePath();
                 exposedFiles.put(fileName, true);
             }
         }

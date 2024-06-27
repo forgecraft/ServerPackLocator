@@ -1,41 +1,46 @@
 package cpw.mods.forge.serverpacklocator;
 
+import org.jetbrains.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.function.Function;
-import java.util.function.Supplier;
+import java.util.function.Predicate;
 
 public class ModAccessor {
-    private static String statusLine = "ServerPack: unknown";
-    private static Function<UUID, CompletableFuture<Boolean>> isWhiteListed = (uuid) -> CompletableFuture.completedFuture(false);
-    private static Supplier<CompletableFuture<Boolean>> isWhiteListEnabled = () -> CompletableFuture.completedFuture(false);
+    private static final Logger LOG = LoggerFactory.getLogger(ModAccessor.class);
 
-    public static void setStatusLine(final String statusLine)
-    {
+    private static String statusLine = "ServerPack: unknown";
+    @Nullable
+    private static volatile Predicate<UUID> allowListStrategy;
+    private static volatile boolean logIps = true;
+
+    public static void setStatusLine(final String statusLine) {
         ModAccessor.statusLine = statusLine;
     }
-    public static String getStatusLine()
-    {
+
+    public static String getStatusLine() {
         return statusLine;
     }
 
-    public static Function<UUID, CompletableFuture<Boolean>> getIsWhiteListed()
-    {
-        return isWhiteListed;
+    public static boolean isWhiteListed(UUID uuid) {
+        var strategy = allowListStrategy;
+        if (strategy == null) {
+            LOG.info("Rejecting whitelist check for {}, since the utility mod has not yet loaded.", uuid);
+            return false;
+        }
+        return strategy.test(uuid);
     }
 
-    public static Supplier<CompletableFuture<Boolean>> getIsWhiteListEnabled()
-    {
-        return isWhiteListEnabled;
+    public static void setAllowListStrategy(@Nullable Predicate<UUID> allowListStrategy) {
+        ModAccessor.allowListStrategy = allowListStrategy;
     }
 
-    public static void setIsWhiteListed(final Function<UUID, CompletableFuture<Boolean>> isWhiteListed)
-    {
-        ModAccessor.isWhiteListed = isWhiteListed;
+    public static boolean isLogIps() {
+        return logIps;
     }
 
-    public static void setIsWhiteListEnabled(final Supplier<CompletableFuture<Boolean>> isWhiteListEnabled)
-    {
-        ModAccessor.isWhiteListEnabled = isWhiteListEnabled;
+    public static void setLogIps(boolean logIps) {
+        ModAccessor.logIps = logIps;
     }
 }

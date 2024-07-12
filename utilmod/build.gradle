@@ -2,7 +2,7 @@ plugins {
     id 'net.neoforged.moddev'
 }
 
-group = 'cpw.mods.forge.serverpackutility'
+group = 'net.forgecraft.serverpackutility'
 version = rootProject.version
 archivesBaseName = rootProject.name + "-" + project.name
 

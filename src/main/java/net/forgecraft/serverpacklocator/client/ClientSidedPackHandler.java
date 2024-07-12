@@ -13,7 +13,7 @@ import java.util.function.Supplier;
 
 public class ClientSidedPackHandler extends SidedPackHandler<ClientConfig> {
 
-    private MultiThreadedDownloader clientDownloader;
+    private final MultiThreadedDownloader clientDownloader;
 
     public ClientSidedPackHandler(Path gameDir, Path configPath) throws ConfigException {
         super(gameDir, configPath);

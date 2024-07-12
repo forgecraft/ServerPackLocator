@@ -62,7 +62,7 @@ configurations {
 }
 
 def jarUtilMod = tasks.register(sourceSets.utilmod.jarTaskName, Jar) {
-    archiveBaseName = "SPL-utilmod"
+    archiveClassifier = "utilmod"
     from(sourceSets.utilmod.output)
 }
 
@@ -71,7 +71,7 @@ def copyUtilMod = tasks.register("copyUtilMod", Copy) {
     into(layout.buildDirectory.dir("generated/splUtilMod"))
     rename {
         // The shadow plugin says we should rename this to not have a .jar ending
-        return "SPL-utilmod.embedded"
+        return "serverpacklocator-utilmod.embedded"
     }
 }
 

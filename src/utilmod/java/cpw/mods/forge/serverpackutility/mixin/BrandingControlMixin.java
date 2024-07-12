@@ -1,9 +1,9 @@
-package cpw.mods.forge.serverpackutility.mixin;
+package net.forgecraft.serverpackutility.mixin;
 
 import com.google.common.collect.ImmutableList;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import cpw.mods.forge.serverpacklocator.ModAccessor;
+import net.forgecraft.serverpacklocator.ModAccessor;
 import net.neoforged.neoforge.internal.BrandingControl;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;

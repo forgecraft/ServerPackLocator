@@ -1,7 +1,7 @@
-package cpw.mods.forge.serverpacklocator.server;
+package net.forgecraft.serverpacklocator.server;
 
-import cpw.mods.forge.serverpacklocator.ModAccessor;
-import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
+import net.forgecraft.serverpacklocator.ModAccessor;
+import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;

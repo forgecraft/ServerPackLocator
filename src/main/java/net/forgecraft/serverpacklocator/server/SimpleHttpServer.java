@@ -1,6 +1,6 @@
-package cpw.mods.forge.serverpacklocator.server;
+package net.forgecraft.serverpacklocator.server;
 
-import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
+import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;

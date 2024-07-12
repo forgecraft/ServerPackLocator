@@ -8,8 +8,8 @@ import com.electronwill.nightconfig.core.io.WritingMode;
 import com.electronwill.nightconfig.json.JsonFormat;
 import com.electronwill.nightconfig.toml.TomlFormat;
 import com.google.gson.Gson;
-import cpw.mods.forge.serverpacklocator.secure.IConnectionSecurityManager;
-import cpw.mods.forge.serverpacklocator.secure.SecurityConfigHolder;
+import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
+import net.forgecraft.serverpacklocator.secure.SecurityConfigHolder;
 
 import javax.annotation.Nullable;
 import java.io.File;

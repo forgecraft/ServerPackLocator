@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator.secure;
+package net.forgecraft.serverpacklocator.secure;
 
 public interface SecurityConfigHolder {
     SecurityConfig getSecurity();

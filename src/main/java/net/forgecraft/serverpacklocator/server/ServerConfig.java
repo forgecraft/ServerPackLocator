@@ -1,14 +1,14 @@
-package cpw.mods.forge.serverpacklocator.server;
+package net.forgecraft.serverpacklocator.server;
 
 import com.electronwill.nightconfig.core.EnumGetMethod;
 import com.electronwill.nightconfig.core.conversion.Conversion;
 import com.electronwill.nightconfig.core.conversion.SpecEnum;
 import com.electronwill.nightconfig.core.conversion.SpecIntInRange;
 import com.electronwill.nightconfig.core.conversion.SpecNotNull;
-import cpw.mods.forge.serverpacklocator.secure.SecurityConfig;
-import cpw.mods.forge.serverpacklocator.secure.SecurityConfigHolder;
-import cpw.mods.forge.serverpacklocator.utils.ObjectUtils;
-import cpw.mods.forge.serverpacklocator.utils.SyncType;
+import net.forgecraft.serverpacklocator.secure.SecurityConfig;
+import net.forgecraft.serverpacklocator.secure.SecurityConfigHolder;
+import net.forgecraft.serverpacklocator.utils.ObjectUtils;
+import net.forgecraft.serverpacklocator.utils.SyncType;
 
 import java.util.ArrayList;
 import java.util.List;

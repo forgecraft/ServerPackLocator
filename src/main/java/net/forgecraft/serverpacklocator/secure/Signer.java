@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator.secure;
+package net.forgecraft.serverpacklocator.secure;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

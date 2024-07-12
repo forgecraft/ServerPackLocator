@@ -1,7 +1,7 @@
-package cpw.mods.forge.serverpacklocator.server;
+package net.forgecraft.serverpacklocator.server;
 
-import cpw.mods.forge.serverpacklocator.FileChecksumValidator;
-import cpw.mods.forge.serverpacklocator.ServerManifest;
+import net.forgecraft.serverpacklocator.FileChecksumValidator;
+import net.forgecraft.serverpacklocator.ServerManifest;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

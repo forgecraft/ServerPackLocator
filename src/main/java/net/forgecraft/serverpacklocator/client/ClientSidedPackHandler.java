@@ -1,7 +1,7 @@
-package cpw.mods.forge.serverpacklocator.client;
+package net.forgecraft.serverpacklocator.client;
 
-import cpw.mods.forge.serverpacklocator.ConfigException;
-import cpw.mods.forge.serverpacklocator.SidedPackHandler;
+import net.forgecraft.serverpacklocator.ConfigException;
+import net.forgecraft.serverpacklocator.SidedPackHandler;
 
 import java.io.File;
 import java.io.IOException;

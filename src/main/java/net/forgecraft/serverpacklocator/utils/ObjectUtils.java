@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator.utils;
+package net.forgecraft.serverpacklocator.utils;
 
 import java.util.function.Consumer;
 

@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator.secure;
+package net.forgecraft.serverpacklocator.secure;
 
 import com.mojang.authlib.yggdrasil.ServicesKeyInfo;
 import com.mojang.authlib.yggdrasil.ServicesKeySet;

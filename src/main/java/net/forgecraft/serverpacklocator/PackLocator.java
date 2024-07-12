@@ -1,7 +1,7 @@
 package net.forgecraft.serverpacklocator;
 
-import cpw.mods.forge.serverpacklocator.client.ClientSidedPackHandler;
-import cpw.mods.forge.serverpacklocator.server.ServerSidedPackHandler;
+import net.forgecraft.serverpacklocator.client.ClientSidedPackHandler;
+import net.forgecraft.serverpacklocator.server.ServerSidedPackHandler;
 import net.neoforged.fml.ModLoadingIssue;
 import net.neoforged.fml.loading.FMLPaths;
 import net.neoforged.neoforgespi.Environment;

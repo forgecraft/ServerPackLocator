@@ -1,10 +1,10 @@
-package cpw.mods.forge.serverpacklocator.client;
+package net.forgecraft.serverpacklocator.client;
 
 import com.electronwill.nightconfig.core.conversion.SpecIntInRange;
 import com.electronwill.nightconfig.core.conversion.SpecNotNull;
-import cpw.mods.forge.serverpacklocator.secure.SecurityConfig;
-import cpw.mods.forge.serverpacklocator.secure.SecurityConfigHolder;
-import cpw.mods.forge.serverpacklocator.utils.ObjectUtils;
+import net.forgecraft.serverpacklocator.secure.SecurityConfig;
+import net.forgecraft.serverpacklocator.secure.SecurityConfigHolder;
+import net.forgecraft.serverpacklocator.utils.ObjectUtils;
 
 import java.util.ArrayList;
 import java.util.List;

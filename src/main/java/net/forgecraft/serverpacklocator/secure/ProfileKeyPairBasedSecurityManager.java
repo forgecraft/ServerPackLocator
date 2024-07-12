@@ -1,13 +1,13 @@
-package cpw.mods.forge.serverpacklocator.secure;
+package net.forgecraft.serverpacklocator.secure;
 
 import com.mojang.authlib.minecraft.UserApiService;
 import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
-import cpw.mods.forge.serverpacklocator.ConfigException;
-import cpw.mods.forge.serverpacklocator.LaunchEnvironmentHandler;
-import cpw.mods.forge.serverpacklocator.utils.NonceUtils;
+import net.forgecraft.serverpacklocator.ConfigException;
+import net.forgecraft.serverpacklocator.LaunchEnvironmentHandler;
+import net.forgecraft.serverpacklocator.utils.NonceUtils;
 import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
 import io.netty.channel.ChannelHandlerContext;

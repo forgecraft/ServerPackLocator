@@ -1,9 +1,9 @@
-package cpw.mods.forge.serverpacklocator.secure;
+package net.forgecraft.serverpacklocator.secure;
 
 import com.electronwill.nightconfig.core.EnumGetMethod;
 import com.electronwill.nightconfig.core.conversion.SpecEnum;
 import com.electronwill.nightconfig.core.conversion.SpecNotNull;
-import cpw.mods.forge.serverpacklocator.utils.ObjectUtils;
+import net.forgecraft.serverpacklocator.utils.ObjectUtils;
 
 public class SecurityConfig {
 

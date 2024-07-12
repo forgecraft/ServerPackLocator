@@ -1,6 +1,6 @@
-package cpw.mods.forge.serverpacklocator.secure;
+package net.forgecraft.serverpacklocator.secure;
 
-import cpw.mods.forge.serverpacklocator.ConfigException;
+import net.forgecraft.serverpacklocator.ConfigException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;

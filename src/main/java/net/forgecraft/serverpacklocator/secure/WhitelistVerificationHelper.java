@@ -1,7 +1,7 @@
-package cpw.mods.forge.serverpacklocator.secure;
+package net.forgecraft.serverpacklocator.secure;
 
 import com.google.gson.Gson;
-import cpw.mods.forge.serverpacklocator.ModAccessor;
+import net.forgecraft.serverpacklocator.ModAccessor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

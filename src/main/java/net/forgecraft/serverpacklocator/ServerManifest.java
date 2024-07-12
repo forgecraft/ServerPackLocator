@@ -3,7 +3,7 @@ package net.forgecraft.serverpacklocator;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonSyntaxException;
-import cpw.mods.forge.serverpacklocator.utils.SyncType;
+import net.forgecraft.serverpacklocator.utils.SyncType;
 
 import java.util.List;
 

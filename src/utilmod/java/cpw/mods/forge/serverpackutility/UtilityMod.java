@@ -3,10 +3,10 @@
 // (powered by FernFlower decompiler)
 //
 
-package cpw.mods.forge.serverpackutility;
+package net.forgecraft.serverpackutility;
 
 import com.mojang.authlib.GameProfile;
-import cpw.mods.forge.serverpacklocator.ModAccessor;
+import net.forgecraft.serverpacklocator.ModAccessor;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;

@@ -8,6 +8,9 @@ plugins {
 
 gradleutils {
     version {
+        tags {
+            includeFilter('10.0')
+        }
         branches {
             suffixBranch()
             suffixExemptedBranch('main')

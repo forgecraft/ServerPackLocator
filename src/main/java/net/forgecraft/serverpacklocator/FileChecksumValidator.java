@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator;
+package net.forgecraft.serverpacklocator;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

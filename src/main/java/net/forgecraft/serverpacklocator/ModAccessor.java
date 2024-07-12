@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator;
+package net.forgecraft.serverpacklocator;
 
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;

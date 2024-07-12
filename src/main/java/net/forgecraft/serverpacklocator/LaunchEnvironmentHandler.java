@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator;
+package net.forgecraft.serverpacklocator;
 
 import cpw.mods.modlauncher.Environment;
 import cpw.mods.modlauncher.Launcher;

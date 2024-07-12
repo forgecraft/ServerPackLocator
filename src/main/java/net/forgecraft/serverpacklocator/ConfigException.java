@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator;
+package net.forgecraft.serverpacklocator;
 
 public class ConfigException extends Exception {
     public ConfigException(String message) {

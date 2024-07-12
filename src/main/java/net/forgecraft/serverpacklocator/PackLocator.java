@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator;
+package net.forgecraft.serverpacklocator;
 
 import cpw.mods.forge.serverpacklocator.client.ClientSidedPackHandler;
 import cpw.mods.forge.serverpacklocator.server.ServerSidedPackHandler;

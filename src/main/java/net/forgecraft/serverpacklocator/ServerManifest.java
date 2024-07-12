@@ -1,4 +1,4 @@
-package cpw.mods.forge.serverpacklocator;
+package net.forgecraft.serverpacklocator;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;

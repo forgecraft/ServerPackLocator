@@ -20,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -70,6 +71,16 @@ public class MultiThreadedDownloader {
             response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
 
             var serverManifest = ServerManifest.fromString(response.body());
+
+            // Write the file to the client system for debugging
+            if (serverManifest != null) {
+                try {
+                    Files.writeString(clientSidedPackHandler.getGameDir().resolve("spl/servermanifest-copy.json"), serverManifest.toJson());
+                } catch (IOException e) {
+                    LOGGER.warn("Failed to write server manifest copy", e);
+                }
+            }
+
             LOGGER.debug("Received manifest");
 
             return new PreparedServerDownloadData(
@@ -180,8 +191,12 @@ public class MultiThreadedDownloader {
                 }
 
                 var rootDir = clientSidedPackHandler.getGameDir();
-                var outputDir = rootDir.resolve(directory.path());
+                var outputDir = rootDir.resolve(directory.targetPath());
+                var downloadDir = rootDir.resolve(directory.path());
+
                 var filePath = outputDir.resolve(fileData.relativePath());
+                var downloadFilePath = downloadDir.resolve(fileData.relativePath());
+
                 final String existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
                 if (Objects.equals(fileData.checksum(), existingChecksum)) {
                     LOGGER.debug("Found existing file {} - skipping", fileData.relativePath());
@@ -194,7 +209,8 @@ public class MultiThreadedDownloader {
                 }
 
                 var relativeUrl = rootDir.relativize(filePath).toString().replace("\\", "/");
-                filesToDownload.add(new FileToDownload(relativeUrl, filePath.toFile(), fileData.size(), fileData.checksum()));
+                var relativeDownloadPath = rootDir.relativize(downloadFilePath).toString().replace("\\", "/");
+                filesToDownload.add(new FileToDownload(relativeUrl, relativeDownloadPath, filePath.toFile(), fileData.size(), fileData.checksum()));
             }
         }
 
@@ -202,7 +218,7 @@ public class MultiThreadedDownloader {
     }
 
     private void downloadFile(FileToDownload fileToDownload, ProgressListener progressListener) throws IOException, InterruptedException {
-        var nextFile = fileToDownload.relativeUrl();
+        var nextFile = fileToDownload.relativeDownloadPath();
 
         LOGGER.info("Requesting file {}", nextFile);
         var path = "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
@@ -238,7 +254,7 @@ public class MultiThreadedDownloader {
         void onProgress(long downloaded, long expectedSize);
     }
 
-    record FileToDownload(String relativeUrl, File localFile, long size, String checksum) {
+    record FileToDownload(String relativeUrl, String relativeDownloadPath, File localFile, long size, String checksum) {
     }
 
     public record PreparedServerDownloadData(ServerManifest manifest,

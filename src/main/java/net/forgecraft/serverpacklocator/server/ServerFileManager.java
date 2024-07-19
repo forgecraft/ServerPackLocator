@@ -60,9 +60,17 @@ public class ServerFileManager {
             Files.createDirectories(contentPath);
 
             var files = new ArrayList<Path>();
-            try (Stream<Path> walk = Files.list(contentPath)) {
-                walk.filter(Files::isRegularFile)
-                        .forEach(path -> files.add(contentPath.relativize(path)));
+            if (!content.isRecursive()) {
+                try (Stream<Path> walk = Files.list(contentPath)) {
+                    walk.filter(Files::isRegularFile)
+                            .forEach(path -> files.add(contentPath.relativize(path)));
+                }
+            } else {
+                // Recursive directory listing
+                try (Stream<Path> walk = Files.walk(contentPath)) {
+                    walk.filter(Files::isRegularFile)
+                            .forEach(path -> files.add(contentPath.relativize(path)));
+                }
             }
 
             if (files.isEmpty()) {

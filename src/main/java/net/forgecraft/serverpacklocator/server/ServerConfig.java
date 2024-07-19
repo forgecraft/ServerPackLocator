@@ -13,6 +13,7 @@ import net.forgecraft.serverpacklocator.utils.SyncType;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class ServerConfig implements SecurityConfigHolder {
 
@@ -29,6 +30,7 @@ public class ServerConfig implements SecurityConfigHolder {
                     c.syncType = SyncType.LOADED_SERVER;
                     c.name = "servermods";
                     c.directory = DIRECTORY_SERVER_CONTENT;
+                    c.recursive = false;
                 }
         );
 
@@ -92,6 +94,8 @@ public class ServerConfig implements SecurityConfigHolder {
         @SpecNotNull
         private DirectoryServerContent directory;
 
+        private Boolean recursive = false;
+
         public String getName() {
             return name;
         }
@@ -104,6 +108,9 @@ public class ServerConfig implements SecurityConfigHolder {
             return directory;
         }
 
+        public boolean isRecursive() {
+            return Objects.requireNonNullElse(recursive, false);
+        }
     }
 
     public static class DirectoryServerContent {

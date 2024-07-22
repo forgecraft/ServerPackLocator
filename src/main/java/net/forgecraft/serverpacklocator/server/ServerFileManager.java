@@ -93,7 +93,8 @@ public class ServerFileManager {
                     content.getDirectory().getPath(),
                     content.getDirectory().getTargetPath(),
                     fileData,
-                    content.getSyncType()
+                    content.getSyncType(),
+                    content.shouldRemoveDanglingFiles()
             ));
         }
 

@@ -31,6 +31,7 @@ public class ServerConfig implements SecurityConfigHolder {
                     c.name = "servermods";
                     c.directory = DIRECTORY_SERVER_CONTENT;
                     c.recursive = false;
+                    c.removeDanglingFiles = false;
                 }
         );
 
@@ -94,6 +95,8 @@ public class ServerConfig implements SecurityConfigHolder {
         @SpecNotNull
         private DirectoryServerContent directory;
 
+        private Boolean removeDanglingFiles = false;
+
         private Boolean recursive = false;
 
         public String getName() {
@@ -110,6 +113,10 @@ public class ServerConfig implements SecurityConfigHolder {
 
         public boolean isRecursive() {
             return Objects.requireNonNullElse(recursive, false);
+        }
+
+        public boolean shouldRemoveDanglingFiles() {
+            return Objects.requireNonNullElse(removeDanglingFiles, false);
         }
     }
 

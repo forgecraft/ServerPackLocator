@@ -23,7 +23,7 @@ public record ServerManifest(List<DirectoryServerData> directories) {
     }
 
     public record DirectoryServerData(String name, String path, String targetPath, List<FileData> fileData,
-                                      SyncType syncType) {
+                                      SyncType syncType, boolean shouldRemoveDanglingFiles) {
     }
 
     public record FileData(String relativePath, long size, String checksum) {

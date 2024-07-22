@@ -3,6 +3,7 @@ package net.forgecraft.serverpacklocator.client;
 import net.forgecraft.serverpacklocator.FileChecksumValidator;
 import net.forgecraft.serverpacklocator.ServerManifest;
 import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
+import net.forgecraft.serverpacklocator.utils.SyncType;
 import net.neoforged.fml.loading.ImmediateWindowHandler;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import org.apache.commons.lang3.mutable.MutableLong;
@@ -21,6 +22,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -211,6 +213,38 @@ public class MultiThreadedDownloader {
                 var relativeUrl = rootDir.relativize(filePath).toString().replace("\\", "/");
                 var relativeDownloadPath = rootDir.relativize(downloadFilePath).toString().replace("\\", "/");
                 filesToDownload.add(new FileToDownload(relativeUrl, relativeDownloadPath, filePath.toFile(), fileData.size(), fileData.checksum()));
+            }
+        }
+
+        // Read the directories to diff against the files we have to download vs what we have from the server
+        for (var directory : manifest.directories()) {
+            if (!directory.shouldRemoveDanglingFiles()) {
+                continue;
+            }
+
+            var outputDir = clientSidedPackHandler.getGameDir().resolve(directory.targetPath());
+            if (!Files.exists(outputDir)) {
+                continue;
+            }
+
+            // Read the directory and compare against the files we have to download
+            try (var stream = Files.walk(outputDir)) {
+                List<Path> dirFiles = stream.filter(Files::isRegularFile).toList();
+
+                for (var file : dirFiles) {
+                    var relativePath = outputDir.relativize(file).toString().replace("\\", "/");
+
+                    if (directory.fileData().stream().noneMatch(f -> f.relativePath().equals(relativePath))) {
+                        try {
+                            Files.delete(file);
+                            LOGGER.info("Deleted dangling file {}", file);
+                        } catch (IOException e) {
+                            LOGGER.warn("Failed to delete dangling file {}", file, e);
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                LOGGER.warn("Failed to read directory {}", outputDir, e);
             }
         }
 

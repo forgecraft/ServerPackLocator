@@ -74,7 +74,21 @@ syncType = "FORCED_SYNC"
 
 [server.exposedServerContent.directory]
 path = "config"
+
+[[server.exposedServerContent]]
+name = "client-kubejs"
+syncType = "FORCED_SYNC"
+recursive = true
+removeDanglingFiles = true
+
+[server.exposedServerContent.directory]
+path = "spl/client-kubejs"
+targetPath = "kubejs"
 ```
+
+- `targetPath` is optional and allows you to change the directory name on the client-side.
+- `recursive` is optional and allows you to copy the entire directory recursively.
+- `removeDanglingFiles` is optional and allows you to tell clients to remove files that are not with-in the server content.
 
 Available sync types:
 

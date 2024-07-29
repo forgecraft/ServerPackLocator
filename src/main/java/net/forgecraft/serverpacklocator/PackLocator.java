@@ -79,6 +79,11 @@ public class PackLocator implements IModFileCandidateLocator {
         ModAccessor.setStatusLine("Successfully downloaded server pack");
 
         for (var modFolder : modFolders) {
+            if (!modFolder.exists()) {
+                LOGGER.error("Mod folder {} does not exist.", modFolder);
+                continue;
+            }
+
             IModFileCandidateLocator.forFolder(modFolder, "").findCandidates(launchContext, pipeline);
         }
     }

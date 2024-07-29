@@ -30,8 +30,6 @@ public class ServerConfig implements SecurityConfigHolder {
                     c.syncType = SyncType.LOADED_SERVER;
                     c.name = "servermods";
                     c.directory = DIRECTORY_SERVER_CONTENT;
-                    c.recursive = false;
-                    c.removeDanglingFiles = false;
                 }
         );
 

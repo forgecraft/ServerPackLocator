@@ -192,8 +192,17 @@ public class MultiThreadedDownloader {
                     continue;
                 }
 
+                if (directory.targetPath().contains("..")) {
+                    throw new IllegalArgumentException("Target path contains '..' - potential directory traversal attack");
+                }
+
                 var rootDir = clientSidedPackHandler.getGameDir();
                 var outputDir = rootDir.resolve(directory.targetPath());
+
+                if (!outputDir.startsWith(rootDir)) {
+                    throw new IllegalArgumentException("Target path is outside of game directory");
+                }
+
                 var downloadDir = rootDir.resolve(directory.path());
 
                 var filePath = outputDir.resolve(fileData.relativePath());
@@ -222,7 +231,16 @@ public class MultiThreadedDownloader {
                 continue;
             }
 
+            // this is overkill but let's be safe regarding directory traversal attacks
+            if (directory.targetPath().contains("..")) {
+                throw new IllegalArgumentException("Target path contains '..' - potential directory traversal attack");
+            }
+
             var outputDir = clientSidedPackHandler.getGameDir().resolve(directory.targetPath());
+            if (!outputDir.startsWith(clientSidedPackHandler.getGameDir())) {
+                throw new IllegalArgumentException("Target path is outside of game directory");
+            }
+
             if (!Files.exists(outputDir)) {
                 continue;
             }

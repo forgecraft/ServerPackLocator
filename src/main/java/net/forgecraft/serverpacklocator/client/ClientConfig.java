@@ -51,7 +51,6 @@ public class ClientConfig implements SecurityConfigHolder {
         @SpecNotNull
         private List<DownloadedServerContent> downloadedServerContent = new ArrayList<>();
 
-        @SpecNotNull
         private String quickPlayServer;
 
         public String getRemoteServer() {

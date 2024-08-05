@@ -21,8 +21,8 @@ public abstract class MinecraftMixin {
             cancellable = true
     )
     private void inject(@Nullable Minecraft.GameLoadCookie cookie, CallbackInfo ci) {
-        // quit out if cookie is missing or user requested quick play via vanilla client (launch args)
-        if (cookie == null || cookie.quickPlayData().isEnabled())
+        // quit out if user requested quick play via vanilla client (launch args)
+        if (cookie != null && cookie.quickPlayData().isEnabled())
             return;
 
         // parse server address

@@ -1,13 +1,11 @@
 package net.forgecraft.serverpacklocator.client;
 
-import com.electronwill.nightconfig.core.conversion.SpecIntInRange;
 import com.electronwill.nightconfig.core.conversion.SpecNotNull;
+import java.util.ArrayList;
+import java.util.List;
 import net.forgecraft.serverpacklocator.secure.SecurityConfig;
 import net.forgecraft.serverpacklocator.secure.SecurityConfigHolder;
 import net.forgecraft.serverpacklocator.utils.ObjectUtils;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class ClientConfig implements SecurityConfigHolder {
 
@@ -17,6 +15,7 @@ public class ClientConfig implements SecurityConfigHolder {
                 new Client(),
                 c -> {
                     c.remoteServer = "http://localhost:8080/";
+                    c.quickPlayServer = "";
                 }
         );
 
@@ -52,12 +51,19 @@ public class ClientConfig implements SecurityConfigHolder {
         @SpecNotNull
         private List<DownloadedServerContent> downloadedServerContent = new ArrayList<>();
 
+        @SpecNotNull
+        private String quickPlayServer;
+
         public String getRemoteServer() {
             return remoteServer;
         }
 
         public List<DownloadedServerContent> getDownloadedServerContent() {
             return downloadedServerContent;
+        }
+
+        public String getQuickPlayServer() {
+            return quickPlayServer;
         }
     }
 

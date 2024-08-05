@@ -1,8 +1,5 @@
 package net.forgecraft.serverpacklocator.client;
 
-import net.forgecraft.serverpacklocator.ConfigException;
-import net.forgecraft.serverpacklocator.SidedPackHandler;
-
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -10,6 +7,9 @@ import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.function.Supplier;
+import net.forgecraft.serverpacklocator.ConfigException;
+import net.forgecraft.serverpacklocator.ModAccessor;
+import net.forgecraft.serverpacklocator.SidedPackHandler;
 
 public class ClientSidedPackHandler extends SidedPackHandler<ClientConfig> {
 
@@ -34,6 +34,8 @@ public class ClientSidedPackHandler extends SidedPackHandler<ClientConfig> {
                 this,
                 securityManager
         );
+
+        ModAccessor.setQuickPlayServer(() -> getConfig().getClient().getQuickPlayServer());
     }
 
     @Override

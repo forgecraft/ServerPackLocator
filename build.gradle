@@ -28,6 +28,7 @@ sourceSets {
 
 neoForge {
     version = project.neoforgeVersion
+    accessTransformers.from("src/utilmod/resources/META-INF/accesstransformer.cfg")
 
     mods {
         spl {

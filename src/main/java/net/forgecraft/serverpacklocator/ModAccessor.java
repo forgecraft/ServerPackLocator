@@ -1,11 +1,11 @@
 package net.forgecraft.serverpacklocator;
 
+import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.UUID;
-import java.util.function.Predicate;
 
 public class ModAccessor {
     private static final Logger LOG = LoggerFactory.getLogger(ModAccessor.class);
@@ -14,6 +14,7 @@ public class ModAccessor {
     @Nullable
     private static volatile Predicate<UUID> allowListStrategy;
     private static volatile boolean logIps = true;
+    private static Supplier<String> quickPlayServer = () -> null;
 
     public static void setStatusLine(final String statusLine) {
         ModAccessor.statusLine = statusLine;
@@ -42,5 +43,14 @@ public class ModAccessor {
 
     public static void setLogIps(boolean logIps) {
         ModAccessor.logIps = logIps;
+    }
+
+    public static void setQuickPlayServer(Supplier<String> quickPlayServer) {
+        ModAccessor.quickPlayServer = quickPlayServer;
+    }
+
+    @Nullable
+    public static String getQuickPlayServer() {
+        return quickPlayServer.get();
     }
 }

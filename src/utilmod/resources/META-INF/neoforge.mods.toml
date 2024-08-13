@@ -14,3 +14,5 @@ This mod is distributed as part of the ServerPackLocator to allow interaction wi
 '''
 [[mixins]]
 config="utilitymod.mixin.json"
+[[accessTransformers]]
+file="META-INF/accesstransformer.cfg"

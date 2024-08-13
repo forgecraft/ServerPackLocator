@@ -124,3 +124,14 @@ on disk.
 [client]
 downloadedServerContent = [{ name = "servermods", blackListRegex=["FilenameRegExp.*", "OtherFilenameRegexp.*"]}]
 ```
+
+### Auto-Connecting on Startup
+
+The client can be configured to auto-connect to a server after initial launch.
+
+_Note: The Vanilla launchers QuickPlay feature will take priority over this feature._
+
+```toml
+[client]
+quickPlayServer = "localhost:25565" # Your servers ip (The same as what you enter in game)
+```

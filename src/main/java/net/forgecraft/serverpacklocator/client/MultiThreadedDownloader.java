@@ -297,7 +297,7 @@ public class MultiThreadedDownloader {
         // Validate that the downloaded file actually matches the expected checksum
         var downloadChecksum = FileChecksumValidator.computeChecksumFor(file.toPath());
         if (!Objects.equals(downloadChecksum, fileToDownload.checksum)) {
-            throw new IOException("Downloaded file has checksum " + downloadChecksum + " but expected " + fileToDownload.checksum);
+            throw new IOException("Downloaded file (" + file.toPath() + ") has checksum " + downloadChecksum + " but expected " + fileToDownload.checksum + " (" + fileToDownload.relativeDownloadPath + ")");
         }
     }
 

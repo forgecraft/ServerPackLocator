@@ -131,6 +131,10 @@ public class ServerConfig implements SecurityConfigHolder {
         public List<String> blacklistedFiles = new ArrayList<>();
 
         public List<String> getBlacklistedFiles() {
+            if (blacklistedFiles == null) {
+                blacklistedFiles = new ArrayList<>();
+            }
+
             return blacklistedFiles;
         }
 

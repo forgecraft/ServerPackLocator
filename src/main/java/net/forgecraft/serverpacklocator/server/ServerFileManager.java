@@ -78,7 +78,7 @@ public class ServerFileManager {
                 continue; // Skip empty directories
             }
 
-            var blacklist = content.getDirectory().blacklistedFiles;
+            var blacklist = content.getDirectory().getBlacklistedFiles();
             var fileData = new ArrayList<ServerManifest.FileData>(files.size());
             for (var relativePath : files) {
                 var fullPath = contentPath.resolve(relativePath);

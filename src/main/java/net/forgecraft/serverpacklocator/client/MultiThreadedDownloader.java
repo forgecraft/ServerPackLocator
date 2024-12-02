@@ -3,7 +3,6 @@ package net.forgecraft.serverpacklocator.client;
 import net.forgecraft.serverpacklocator.FileChecksumValidator;
 import net.forgecraft.serverpacklocator.ServerManifest;
 import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
-import net.forgecraft.serverpacklocator.utils.SyncType;
 import net.neoforged.fml.loading.ImmediateWindowHandler;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import org.apache.commons.lang3.mutable.MutableLong;

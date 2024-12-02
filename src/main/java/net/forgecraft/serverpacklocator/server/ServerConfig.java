@@ -128,6 +128,12 @@ public class ServerConfig implements SecurityConfigHolder {
             return path;
         }
 
+        public List<String> blacklistedFiles = new ArrayList<>();
+
+        public List<String> getBlacklistedFiles() {
+            return blacklistedFiles;
+        }
+
         public String getTargetPath() {
             return targetPath != null ? targetPath : path;
         }

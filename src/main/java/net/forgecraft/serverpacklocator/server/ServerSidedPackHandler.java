@@ -2,22 +2,28 @@ package net.forgecraft.serverpacklocator.server;
 
 import net.forgecraft.serverpacklocator.ConfigException;
 import net.forgecraft.serverpacklocator.SidedPackHandler;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
 
 public class ServerSidedPackHandler extends SidedPackHandler<ServerConfig>
 {
+    public static final ExecutorService EXECUTOR_SERVICE = Executors.newSingleThreadExecutor(new DaemonThreadFactory());
+
     private final ServerFileManager serverFileManager;
 
     public ServerSidedPackHandler(Path gameDir, Path configPath) throws ConfigException {
         super(gameDir, configPath);
 
         serverFileManager = new ServerFileManager(
-                this,
-                getConfig().getServer().getExposedServerContent()
+                this
         );
 
         var port = getConfig().getServer().getPort();
@@ -47,5 +53,13 @@ public class ServerSidedPackHandler extends SidedPackHandler<ServerConfig>
 
     public ServerFileManager getFileManager() {
         return serverFileManager;
+    }
+
+    static class DaemonThreadFactory implements ThreadFactory {
+        public Thread newThread(@NotNull Runnable r) {
+            Thread t = new Thread(r);
+            t.setDaemon(true); // Set the thread as a daemon thread
+            return t;
+        }
     }
 }

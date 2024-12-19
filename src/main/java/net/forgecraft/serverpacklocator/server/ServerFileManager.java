@@ -2,10 +2,12 @@ package net.forgecraft.serverpacklocator.server;
 
 import net.forgecraft.serverpacklocator.FileChecksumValidator;
 import net.forgecraft.serverpacklocator.ServerManifest;
+import net.neoforged.fml.loading.FMLPaths;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -15,20 +17,18 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 public class ServerFileManager {
-
     private static final Logger LOGGER = LogManager.getLogger();
     private final ServerSidedPackHandler serverSidedPackHandler;
-    private final ServerManifest manifest;
+    private ServerManifest manifest;
     private final Set<String> exposedFiles;
 
-    ServerFileManager(ServerSidedPackHandler packHandler, final List<ServerConfig.ExposedServerContent> exposedContent) {
+    ServerFileManager(ServerSidedPackHandler packHandler) {
         this.serverSidedPackHandler = packHandler;
-        try {
-            this.manifest = generateManifest(packHandler, exposedContent);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to generate the server manifest.", e);
-        }
+
+        rebuildManifest();
         this.exposedFiles = getExposedFiles(manifest);
+
+        createWatchService();
     }
 
     public ServerManifest getManifest() {
@@ -46,6 +46,14 @@ public class ServerFileManager {
         } catch (IOException e) {
             LOGGER.warn("Failed to read file {}", fileName);
             return null;
+        }
+    }
+
+    public void rebuildManifest() {
+        try {
+            this.manifest = generateManifest(this.serverSidedPackHandler, serverSidedPackHandler.getConfig().getServer().getExposedServerContent());
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to generate the server manifest.", e);
         }
     }
 
@@ -80,12 +88,22 @@ public class ServerFileManager {
 
             var blacklist = content.getDirectory().getBlacklistedFiles();
             var fileData = new ArrayList<ServerManifest.FileData>(files.size());
+
+            // Get the systems file matcher
+            FileSystem fileSystem = contentPath.getFileSystem();
             for (var relativePath : files) {
                 var fullPath = contentPath.resolve(relativePath);
                 var relPath = relativePath.toString();
 
-                if (blacklist.contains(relPath)) {
-                    LOGGER.debug("Skipping blacklisted file {}", relPath);
+                boolean skip = false;
+                for (var blacklistedFile : blacklist) {
+                    if (fileSystem.getPathMatcher("glob:" + blacklistedFile).matches(relativePath)) {
+                        LOGGER.debug("Skipping blacklisted file {}", relPath);
+                        skip = true;
+                    }
+                }
+
+                if (skip) {
                     continue;
                 }
 
@@ -106,7 +124,20 @@ public class ServerFileManager {
             ));
         }
 
-        return new ServerManifest(directories);
+        // Write the manifest to the server directory
+        var gameDir = FMLPaths.GAMEDIR.get();
+        var splDirectory = gameDir.resolve("spl");
+
+        if (!Files.exists(splDirectory)) {
+            Files.createDirectories(splDirectory);
+        }
+
+        var manifestPath = splDirectory.resolve("manifest.json");
+
+        ServerManifest serverManifest = new ServerManifest(directories);
+        Files.writeString(manifestPath, serverManifest.toJson());
+
+        return serverManifest;
     }
 
     private static Set<String> getExposedFiles(final ServerManifest manifest) {
@@ -120,5 +151,10 @@ public class ServerFileManager {
         }
 
         return exposedFiles.keySet();
+    }
+
+    private void createWatchService() {
+        LOGGER.info("Starting file watch service");
+        ServerSidedPackHandler.EXECUTOR_SERVICE.execute(new ServerFileWatchService(this));
     }
 }

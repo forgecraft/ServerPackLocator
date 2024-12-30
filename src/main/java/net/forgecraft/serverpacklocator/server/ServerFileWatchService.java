@@ -6,10 +6,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.nio.file.Path;
-import java.nio.file.StandardWatchEventKinds;
-import java.nio.file.WatchKey;
-import java.nio.file.WatchService;
+import java.nio.file.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -127,8 +124,15 @@ public class ServerFileWatchService implements Runnable {
         var gamePath = FMLPaths.GAMEDIR.get();
         ServerManifest manifest = fileManager.getManifest();
         for (ServerManifest.DirectoryServerData directory : manifest.directories()) {
-            var relativeDir = gamePath.resolve(directory.path());
-            watchedPaths.add(relativeDir);
+            try (var files = Files.walk(gamePath.resolve(directory.path()))) {
+                files.forEach(file -> {
+                    if (Files.isDirectory(file)) {
+                        watchedPaths.add(file);
+                    }
+                });
+            } catch (IOException e) {
+                LOGGER.error("Failed to walk directory {}", directory.path(), e);
+            }
         }
     }
 }

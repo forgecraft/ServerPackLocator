@@ -5,8 +5,8 @@ pluginManagement {
         id 'io.github.goooler.shadow' version '8.1.7'
         id 'de.undercouch.download' version '5.6.0'
         // https://projects.neoforged.net/neoforged/ModDevGradle
-        id 'net.neoforged.moddev' version '1.0.3'
-        id 'net.neoforged.moddev.repositories' version '1.0.3'
+        id 'net.neoforged.moddev' version '2.0.78'
+        id 'net.neoforged.moddev.repositories' version '2.0.78'
         id 'net.neoforged.gradleutils' version '3.0.0'
     }
 }
@@ -19,8 +19,20 @@ plugins {
 dependencyResolutionManagement {
     repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
     rulesMode = RulesMode.FAIL_ON_PROJECT_RULES
+
     repositories {
         mavenCentral()
+    }
+
+    repositories {
+        maven {
+            name 'Maven for PR #2039' // https://github.com/neoforged/NeoForge/pull/2039
+            url 'https://prmaven.neoforged.net/NeoForge/pr2039'
+            content {
+                includeModule('net.neoforged', 'neoforge')
+                includeModule('net.neoforged', 'testframework')
+            }
+        }
     }
 }
 

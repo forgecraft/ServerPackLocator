@@ -141,14 +141,9 @@ public class MultiThreadedDownloader {
                 for (var fileToDownload : filesToDownload) {
                     var bytesDownloadedAtStartOfFile = bytesDownloaded;
                     progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile));
-                    MutableLong lastRenderTick = new MutableLong(System.currentTimeMillis());
                     progressBar.label("Downloading " + fileToDownload.localFile.getName() + "...");
                     downloadFile(fileToDownload, (downloaded, total) -> {
                         progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile + downloaded));
-                        if (System.currentTimeMillis() - lastRenderTick.getValue() >= 50L) {
-                            ImmediateWindowHandler.renderTick();
-                            lastRenderTick.setValue(System.currentTimeMillis());
-                        }
                     });
                     // The original estimate was based on this, and the progress bar should reflect it
                     // even if the server sent a different size

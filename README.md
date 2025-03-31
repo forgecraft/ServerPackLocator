@@ -48,6 +48,34 @@ SPL opens a port to listen for HTTP connections. You can change this port in the
 port = 8080
 ```
 
+#### SSL Termination
+By default, the included webserver does not expose a TLS based communication channel over HTTP.
+This means that any server operator wishing to expose SPLs webserver over a secure channel must set this up themselves.
+Luckily this can easily be done via a reverse proxy.
+
+> [!WARNING]
+> It is highly recommended to not expose SPLs own webserver to the public, but to apply a reverse proxy. Potentially including a Web Application Firewall, and logging of requests to trace bad-actors.
+
+##### NGINX
+Creating a reverse proxy based on NGINX is simple and you can find an example below:
+```conf
+server {
+    listen 444 ssl;
+    server_name yourdomain.com;
+
+    ssl_certificate /opt/ssl/fullchain.pem;
+    ssl_certificate_key /opt/ssl/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:8080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
 ### Exposing Content
 
 You also configure which directories to send to the client, and whether local changes by clients will be overwritten

@@ -13,10 +13,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
 
-public class ServerSidedPackHandler extends SidedPackHandler<ServerConfig>
-{
-    public static final ExecutorService EXECUTOR_SERVICE = Executors.newSingleThreadExecutor(new DaemonThreadFactory());
-
+public class ServerSidedPackHandler extends SidedPackHandler<ServerConfig> {
     private final ServerFileManager serverFileManager;
 
     public ServerSidedPackHandler(Path gameDir, Path configPath) throws ConfigException {
@@ -53,13 +50,5 @@ public class ServerSidedPackHandler extends SidedPackHandler<ServerConfig>
 
     public ServerFileManager getFileManager() {
         return serverFileManager;
-    }
-
-    static class DaemonThreadFactory implements ThreadFactory {
-        public Thread newThread(@NotNull Runnable r) {
-            Thread t = new Thread(r);
-            t.setDaemon(true); // Set the thread as a daemon thread
-            return t;
-        }
     }
 }

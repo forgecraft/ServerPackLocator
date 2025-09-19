@@ -27,8 +27,6 @@ public class ServerFileManager {
 
         rebuildManifest();
         this.exposedFiles = getExposedFiles(manifest);
-
-        createWatchService();
     }
 
     public ServerManifest getManifest() {
@@ -151,10 +149,5 @@ public class ServerFileManager {
         }
 
         return exposedFiles.keySet();
-    }
-
-    private void createWatchService() {
-        LOGGER.info("Starting file watch service");
-        ServerSidedPackHandler.EXECUTOR_SERVICE.execute(new ServerFileWatchService(this));
     }
 }

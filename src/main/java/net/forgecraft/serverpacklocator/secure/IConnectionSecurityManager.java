@@ -20,23 +20,14 @@ public interface IConnectionSecurityManager
 
     boolean onServerConnectionRequest(ChannelHandlerContext ctx, FullHttpRequest msg);
 
-    void initialize(SecurityConfig config) throws ConfigException;
-
     void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, HttpResponse resp);
 
-    static IConnectionSecurityManager create(SecurityConfig config) throws ConfigException {
-        var securityType = config.getType();
-        if (securityType == null) {
-            throw new ConfigException("No securityType is set.");
-        }
-
-        var securityManager = switch (securityType) {
-            case PASSWORD -> PasswordBasedSecurityManager.getInstance();
-            case PUBLICKEY -> ProfileKeyPairBasedSecurityManager.getInstance();
+    static IConnectionSecurityManager create(final SecurityConfig config) throws ConfigException {
+        return switch (config.getType()) {
+            case PASSWORD -> new PasswordBasedSecurityManager(config);
+            case PUBLICKEY -> new ProfileKeyPairBasedSecurityManager();
+            case null -> throw new ConfigException("No securityType is set.");
         };
-
-        securityManager.initialize(config);
-        return securityManager;
     }
 
     @Nullable

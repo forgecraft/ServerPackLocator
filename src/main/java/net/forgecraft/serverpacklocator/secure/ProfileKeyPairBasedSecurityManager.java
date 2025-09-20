@@ -7,19 +7,17 @@ import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
+import com.mojang.logging.LogUtils;
 import io.netty.handler.codec.http.HttpResponse;
-import net.forgecraft.serverpacklocator.ConfigException;
 import net.forgecraft.serverpacklocator.LaunchEnvironmentHandler;
 import net.forgecraft.serverpacklocator.utils.NonceUtils;
 import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
 import net.neoforged.api.distmarker.Dist;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.Field;
@@ -40,16 +38,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager
 {
-    private static final Logger LOGGER = LogManager.getLogger();
-    private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final UUID DEFAULT_NILL_UUID = new UUID(0L, 0L);
 
     private final Map<UUID, String> currentChallenges = new ConcurrentHashMap<>();
-
-    public static ProfileKeyPairBasedSecurityManager getInstance()
-    {
-        return INSTANCE;
-    }
 
     private final SigningHandler signingHandler;
     private final UUID sessionId;
@@ -57,8 +49,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
     private String challengePayload = "";
 
-    private ProfileKeyPairBasedSecurityManager()
-    {
+    public ProfileKeyPairBasedSecurityManager() {
         signingHandler = getSigningHandler();
         sessionId = getSessionId();
         validator = getSignatureValidator();
@@ -418,10 +409,6 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         currentChallenges.put(sessionId, challenge);
         resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
-    }
-
-    @Override
-    public void initialize(SecurityConfig config) {
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {

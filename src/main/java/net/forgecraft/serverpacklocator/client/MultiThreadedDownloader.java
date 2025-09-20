@@ -8,23 +8,24 @@ import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalLong;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Flow;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -140,7 +141,7 @@ public class MultiThreadedDownloader {
                 for (var fileToDownload : filesToDownload) {
                     var bytesDownloadedAtStartOfFile = bytesDownloaded;
                     progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile));
-                    progressBar.label("Downloading " + fileToDownload.localFile.getName() + "...");
+                    progressBar.label("Downloading " + fileToDownload.localFile.getFileName().toString() + "...");
                     downloadFile(fileToDownload, (downloaded, total) -> {
                         progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile + downloaded));
                     });
@@ -214,7 +215,7 @@ public class MultiThreadedDownloader {
 
                 var relativeUrl = rootDir.relativize(filePath).toString().replace("\\", "/");
                 var relativeDownloadPath = rootDir.relativize(downloadFilePath).toString().replace("\\", "/");
-                filesToDownload.add(new FileToDownload(relativeUrl, relativeDownloadPath, filePath.toFile(), fileData.size(), fileData.checksum()));
+                filesToDownload.add(new FileToDownload(relativeUrl, relativeDownloadPath, filePath, fileData.size(), fileData.checksum()));
             }
         }
 
@@ -262,44 +263,80 @@ public class MultiThreadedDownloader {
         return filesToDownload;
     }
 
-    private void downloadFile(FileToDownload fileToDownload, ProgressListener progressListener) throws IOException, InterruptedException {
-        var nextFile = fileToDownload.relativeDownloadPath();
-
+    private void downloadFile(final FileToDownload fileToDownload, final ProgressListener progressListener) throws IOException, InterruptedException {
+        final String nextFile = fileToDownload.relativeDownloadPath();
         LOGGER.info("Requesting file {}", nextFile);
-        var path = "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
 
-        var response = makeRequest(path, true, HttpResponse.BodyHandlers.ofInputStream());
+        final Path destinationPath = fileToDownload.localFile();
+        Files.createDirectories(destinationPath.getParent());
 
-        File file = fileToDownload.localFile();
-        file.getParentFile().mkdirs();
+        final HttpResponse<Path> response = makeRequest(
+                "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20"),
+                true,
+                progressListener.trackBodyHandler(
+                        HttpResponse.BodyHandlers.ofFile(destinationPath, StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
+                )
+        );
 
         response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
 
-        var totalBytes = response.headers().firstValueAsLong("Content-Length").orElse(fileToDownload.size());
-
-        try (var outputStream = new FileOutputStream(file); var download = outputStream.getChannel();
-             ReadableByteChannel channel = Channels.newChannel(response.body())) {
-            while ((download.transferFrom(channel, file.length(), 8192)) > 0) {
-                progressListener.onProgress(file.length(), totalBytes);
-            }
-        } catch (IOException e) {
-            // Re-wrap the IO exception to give information about which path failed
-            throw new IOException("Download of " + path + " failed: " + e, e);
-        }
-
         // Validate that the downloaded file actually matches the expected checksum
-        var downloadChecksum = FileChecksumValidator.computeChecksumFor(file.toPath());
+        final HashCode downloadChecksum = FileChecksumValidator.computeChecksumFor(destinationPath);
         if (!Objects.equals(downloadChecksum, fileToDownload.checksum)) {
-            throw new IOException("Downloaded file (" + file.toPath() + ") has checksum " + downloadChecksum + " but expected " + fileToDownload.checksum + " (" + fileToDownload.relativeDownloadPath + ")");
+            throw new IOException("Downloaded file (" + destinationPath + ") has checksum " + downloadChecksum + " but expected " + fileToDownload.checksum + " (" + fileToDownload.relativeDownloadPath + ")");
         }
     }
 
     @FunctionalInterface
     interface ProgressListener {
+        default <T> HttpResponse.BodyHandler<T> trackBodyHandler(final HttpResponse.BodyHandler<T> upstreamHandler) {
+            return responseInfo -> {
+                final HttpResponse.BodySubscriber<T> upstream = upstreamHandler.apply(responseInfo);
+
+                final OptionalLong contentLength = responseInfo.headers().firstValueAsLong("Content-Length");
+                if (contentLength.isEmpty()) {
+                    return upstream;
+                }
+
+                return new HttpResponse.BodySubscriber<>() {
+                    private long receivedBytes;
+
+                    @Override
+                    public CompletionStage<T> getBody() {
+                        return upstream.getBody();
+                    }
+
+                    @Override
+                    public void onSubscribe(final Flow.Subscription subscription) {
+                        upstream.onSubscribe(subscription);
+                    }
+
+                    @Override
+                    public void onNext(final List<ByteBuffer> item) {
+                        upstream.onNext(item);
+                        for (final ByteBuffer buffer : item) {
+                            receivedBytes += buffer.capacity();
+                        }
+                        onProgress(receivedBytes, contentLength.getAsLong());
+                    }
+
+                    @Override
+                    public void onError(final Throwable throwable) {
+                        upstream.onError(throwable);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        upstream.onComplete();
+                    }
+                };
+            };
+        }
+
         void onProgress(long downloaded, long expectedSize);
     }
 
-    record FileToDownload(String relativeUrl, String relativeDownloadPath, File localFile, long size, HashCode checksum) {
+    record FileToDownload(String relativeUrl, String relativeDownloadPath, Path localFile, long size, HashCode checksum) {
     }
 
     public record PreparedServerDownloadData(ServerManifest manifest,

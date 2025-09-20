@@ -49,8 +49,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
         if (Objects.equals("/servermanifest.json", msg.uri())) {
             LOGGER.info("Manifest request for client {}", determineClientIp(ctx, msg));
-            final String s = serverFileManager.getManifest().toJson();
-            buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
+            buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", serverFileManager.getManifestJson());
         } else if (msg.uri().startsWith("/files/")) {
             String fileName = URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8);
             ServerFileManager.ExposedFile exposedFile = serverFileManager.getExposedFile(fileName);

@@ -22,6 +22,7 @@ public class ServerFileManager {
 
     private final ServerSidedPackHandler serverSidedPackHandler;
     private ServerManifest manifest;
+    private String manifestJson;
 
     private final Map<String, ExposedFile> exposedFilesByName;
 
@@ -38,6 +39,10 @@ public class ServerFileManager {
         return manifest;
     }
 
+    public String getManifestJson() {
+        return manifestJson;
+    }
+
     @Nullable
     ExposedFile getExposedFile(final String fileName) {
         return exposedFilesByName.get(fileName);
@@ -45,7 +50,9 @@ public class ServerFileManager {
 
     public void rebuildManifest() {
         try {
-            this.manifest = generateManifest(this.serverSidedPackHandler, serverSidedPackHandler.getConfig().getServer().getExposedServerContent());
+            manifest = generateManifest(this.serverSidedPackHandler, serverSidedPackHandler.getConfig().getServer().getExposedServerContent());
+            manifestJson = manifest.toJson();
+            storeManifest(manifestJson);
         } catch (IOException e) {
             throw new RuntimeException("Failed to generate the server manifest.", e);
         }
@@ -118,20 +125,17 @@ public class ServerFileManager {
             ));
         }
 
+        return new ServerManifest(directories);
+    }
+
+    private static void storeManifest(String manifestJson) throws IOException {
         // Write the manifest to the server directory
         var gameDir = FMLPaths.GAMEDIR.get();
         var splDirectory = gameDir.resolve("spl");
 
-        if (!Files.exists(splDirectory)) {
-            Files.createDirectories(splDirectory);
-        }
-
+        Files.createDirectories(splDirectory);
         var manifestPath = splDirectory.resolve("manifest.json");
-
-        ServerManifest serverManifest = new ServerManifest(directories);
-        Files.writeString(manifestPath, serverManifest.toJson());
-
-        return serverManifest;
+        Files.writeString(manifestPath, manifestJson);
     }
 
     private static Map<String, ExposedFile> getExposedFiles(final ServerManifest manifest, final Path rootDirectory) {

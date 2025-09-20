@@ -43,9 +43,11 @@ neoForge {
         client {
             client()
             gameDirectory = file("runs/client")
-            programArgument "--launch_target"
-            programArgument "cpw.mods.bootstraplauncher.BootstrapLauncher"
-            mainClass = "net.covers1624.devlogin.DevLogin"
+        }
+        clientAuth {
+            client()
+            gameDirectory = file("runs/client")
+            devLogin = true
         }
         server {
             server()
@@ -103,13 +105,12 @@ shadowJar {
 }
 
 dependencies {
-    shadow("io.netty:netty-codec-http:4.1.97.Final") {
+    shadow("io.netty:netty-codec-http:4.1.118.Final") {
         transitive = false
     }
-    shadow("com.electronwill.night-config:json:3.6.4") {
+    shadow("com.electronwill.night-config:json:3.8.3") {
         transitive = false
     }
-    runtimeOnly "net.covers1624:DevLogin:0.1.0.4"
 
     utilmodCompileOnly sourceSets.main.output
     runtimeOnly sourceSets.utilmod.output

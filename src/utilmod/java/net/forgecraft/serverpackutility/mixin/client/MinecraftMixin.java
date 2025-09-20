@@ -29,9 +29,7 @@ public abstract class MinecraftMixin {
             RealmsClient realmsclient = RealmsClient.getOrCreate(serverpacklocator$getCurrentInstance());
             cookie = new Minecraft.GameLoadCookie(realmsclient, new GameConfig.QuickPlayData(
                 null,
-                null,
-                serverAddress.toString(),
-                null
+                new GameConfig.QuickPlayMultiplayerData(serverAddress.toString())
             ));
         }
 

@@ -1,11 +1,10 @@
 package net.forgecraft.serverpacklocator.client;
 
+import com.google.common.hash.HashCode;
 import net.forgecraft.serverpacklocator.FileChecksumValidator;
 import net.forgecraft.serverpacklocator.ServerManifest;
 import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
-import net.neoforged.fml.loading.ImmediateWindowHandler;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
-import org.apache.commons.lang3.mutable.MutableLong;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -202,7 +201,7 @@ public class MultiThreadedDownloader {
                 var filePath = outputDir.resolve(fileData.relativePath());
                 var downloadFilePath = downloadDir.resolve(fileData.relativePath());
 
-                final String existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
+                final HashCode existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
                 if (Objects.equals(fileData.checksum(), existingChecksum)) {
                     LOGGER.debug("Found existing file {} - skipping", fileData.relativePath());
                     continue;
@@ -300,7 +299,7 @@ public class MultiThreadedDownloader {
         void onProgress(long downloaded, long expectedSize);
     }
 
-    record FileToDownload(String relativeUrl, String relativeDownloadPath, File localFile, long size, String checksum) {
+    record FileToDownload(String relativeUrl, String relativeDownloadPath, File localFile, long size, HashCode checksum) {
     }
 
     public record PreparedServerDownloadData(ServerManifest manifest,

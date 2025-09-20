@@ -1,5 +1,7 @@
 package net.forgecraft.serverpacklocator.secure;
 
+import com.google.common.hash.HashCode;
+import com.google.common.hash.Hashing;
 import com.mojang.authlib.minecraft.UserApiService;
 import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
@@ -21,13 +23,10 @@ import org.apache.logging.log4j.Logger;
 import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.net.Proxy;
-import java.net.URLConnection;
 import java.net.http.HttpRequest;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.time.Instant;
@@ -177,66 +176,36 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         }
     }
 
-    private static byte[] digest(final UUID target)
-    {
-        final byte[] payload = new byte[16];
-        ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN).putLong(target.getMostSignificantBits()).putLong(target.getLeastSignificantBits());
-
-        return digest(payload);
+    private static HashCode digest(final UUID target) {
+        return Hashing.sha256().newHasher(Long.BYTES * 2)
+                .putLong(target.getMostSignificantBits())
+                .putLong(target.getLeastSignificantBits())
+                .hash();
     }
 
-    private static byte[] digest(final String target)
-    {
-        final byte[] sessionIdPayload = target.getBytes(StandardCharsets.UTF_8);
-
-        return digest(sessionIdPayload);
-    }
-
-    private static byte[] digest(byte[] payload) {
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return md.digest(payload);
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new RuntimeException("Failed to get SHA-256 message digest", e);
-        }
+    private static HashCode digest(final String target) {
+        return Hashing.sha256().hashString(target, StandardCharsets.UTF_8);
     }
 
     private static String sign(final UUID payload, final Signer signer) {
-        byte[] messageHash = digest(payload);
-
-        return signDigest(messageHash, signer);
+        return signDigest(digest(payload), signer);
     }
 
     private static String sign(final String payload, final Signer signer) {
-        byte[] messageHash = digest(payload);
-
-        return signDigest(messageHash, signer);
+        return signDigest(digest(payload), signer);
     }
 
-    private static String sign(final byte[] payload, final Signer signer) {
-        byte[] messageHash = digest(payload);
-
-        return signDigest(messageHash, signer);
-    }
-
-    private static String signDigest(byte[] messageHash, Signer signer) {
-        final byte[] signedPayload = signer.sign(messageHash);
+    private static String signDigest(HashCode messageHash, Signer signer) {
+        final byte[] signedPayload = signer.sign(messageHash.asBytes());
         return Base64.getEncoder().encodeToString(signedPayload);
     }
 
     private static boolean validate(final UUID target, final SignatureValidator validator, final byte[] signature) {
-        return validator.validate(digest(target), signature);
+        return validator.validate(digest(target).asBytes(), signature);
     }
 
     private static boolean validate(final String target, final SignatureValidator validator, final byte[] signature) {
-        return validator.validate(digest(target), signature);
-    }
-
-    private static boolean validate(final byte[] target, final SignatureValidator validator, final byte[] signature) {
-        return validator.validate(digest(target), signature);
+        return validator.validate(digest(target).asBytes(), signature);
     }
 
     @Override

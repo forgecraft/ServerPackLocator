@@ -1,18 +1,17 @@
 package net.forgecraft.serverpacklocator.secure;
 
-import net.forgecraft.serverpacklocator.ConfigException;
-import net.forgecraft.serverpacklocator.utils.NonceUtils;
+import com.google.common.hash.Hashing;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
+import net.forgecraft.serverpacklocator.ConfigException;
+import net.forgecraft.serverpacklocator.utils.NonceUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.annotation.Nullable;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Locale;
 
@@ -69,21 +68,7 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
             throw new ConfigException("No server password is set.");
         }
 
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(password.getBytes());
-            byte[] digest = md.digest();
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest) {
-                sb.append(Integer.toHexString(b & 0xff));
-            }
-            this.passwordHash = sb.toString().toUpperCase(Locale.ROOT);
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new IllegalStateException("Missing SHA-256 hashing algorithm", e);
-        }
+        passwordHash = Hashing.sha256().hashString(password, StandardCharsets.UTF_8).toString().toUpperCase(Locale.ROOT);
     }
 
     @Override

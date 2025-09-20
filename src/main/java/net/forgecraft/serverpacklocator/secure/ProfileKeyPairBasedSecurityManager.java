@@ -7,6 +7,7 @@ import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
+import io.netty.handler.codec.http.HttpResponse;
 import net.forgecraft.serverpacklocator.ConfigException;
 import net.forgecraft.serverpacklocator.LaunchEnvironmentHandler;
 import net.forgecraft.serverpacklocator.utils.NonceUtils;
@@ -407,7 +408,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp) {
+    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, HttpResponse resp) {
         final String challenge = NonceUtils.createNonce();
 
         final UUID sessionId = getSessionId(msg.headers());

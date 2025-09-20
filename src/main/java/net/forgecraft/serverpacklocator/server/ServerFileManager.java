@@ -1,32 +1,35 @@
 package net.forgecraft.serverpacklocator.server;
 
+import com.mojang.logging.LogUtils;
 import net.forgecraft.serverpacklocator.FileChecksumValidator;
 import net.forgecraft.serverpacklocator.ServerManifest;
 import net.neoforged.fml.loading.FMLPaths;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import org.slf4j.Logger;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
 import java.nio.file.FileSystem;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class ServerFileManager {
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER = LogUtils.getLogger();
+
     private final ServerSidedPackHandler serverSidedPackHandler;
     private ServerManifest manifest;
-    private final Set<String> exposedFiles;
+
+    private final Map<String, ExposedFile> exposedFilesByName;
 
     ServerFileManager(ServerSidedPackHandler packHandler) {
         this.serverSidedPackHandler = packHandler;
 
         rebuildManifest();
-        this.exposedFiles = getExposedFiles(manifest);
+        this.exposedFilesByName = getExposedFiles(manifest, packHandler.getGameDir());
 
         createWatchService();
     }
@@ -35,18 +38,9 @@ public class ServerFileManager {
         return manifest;
     }
 
-    byte[] findFile(final String fileName) {
-        if (!exposedFiles.contains(fileName)) {
-            LOGGER.warn("Attempt to access non-exposed file {}", fileName);
-            return null;
-        }
-
-        try {
-            return Files.readAllBytes(serverSidedPackHandler.getGameDir().resolve(fileName));
-        } catch (IOException e) {
-            LOGGER.warn("Failed to read file {}", fileName);
-            return null;
-        }
+    @Nullable
+    ExposedFile getExposedFile(final String fileName) {
+        return exposedFilesByName.get(fileName);
     }
 
     public void rebuildManifest() {
@@ -140,17 +134,15 @@ public class ServerFileManager {
         return serverManifest;
     }
 
-    private static Set<String> getExposedFiles(final ServerManifest manifest) {
-        final ConcurrentHashMap<String, Boolean> exposedFiles = new ConcurrentHashMap<>();
-
-        for (ServerManifest.DirectoryServerData directory : manifest.directories()) {
-            for (ServerManifest.FileData file : directory.fileData()) {
-                final String fileName = directory.path() + "/" + file.relativePath();
-                exposedFiles.put(fileName, true);
-            }
-        }
-
-        return exposedFiles.keySet();
+    private static Map<String, ExposedFile> getExposedFiles(final ServerManifest manifest, final Path rootDirectory) {
+        return manifest.directories().stream()
+                .flatMap(directory -> directory.fileData().stream()
+                        .map(file -> {
+                            final String name = directory.path() + "/" + file.relativePath();
+                            return new ExposedFile(name, rootDirectory.resolve(name), file.size());
+                        })
+                )
+                .collect(Collectors.toMap(ExposedFile::name, f -> f));
     }
 
     private void createWatchService() {
@@ -159,5 +151,8 @@ public class ServerFileManager {
                 .name("SPL File Watcher")
                 .daemon(true)
                 .start(new ServerFileWatchService(this));
+    }
+
+    public record ExposedFile(String name, Path path, long size) {
     }
 }

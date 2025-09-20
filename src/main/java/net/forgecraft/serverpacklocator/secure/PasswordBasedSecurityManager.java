@@ -3,7 +3,7 @@ package net.forgecraft.serverpacklocator.secure;
 import com.google.common.hash.Hashing;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpResponse;
 import net.forgecraft.serverpacklocator.ConfigException;
 import net.forgecraft.serverpacklocator.utils.NonceUtils;
 import org.apache.logging.log4j.LogManager;
@@ -72,7 +72,7 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp) {
+    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, HttpResponse resp) {
         //We need to set a challenge for the client to respond to
         //However we do not validate it at all in this security mode.
         final String challenge = NonceUtils.createNonce();

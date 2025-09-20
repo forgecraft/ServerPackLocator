@@ -3,10 +3,9 @@ package net.forgecraft.serverpacklocator.secure;
 import net.forgecraft.serverpacklocator.ConfigException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpResponse;
 
 import javax.annotation.Nullable;
-import java.net.URLConnection;
 import java.net.http.HttpRequest;
 
 public interface IConnectionSecurityManager
@@ -23,7 +22,7 @@ public interface IConnectionSecurityManager
 
     void initialize(SecurityConfig config) throws ConfigException;
 
-    void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp);
+    void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, HttpResponse resp);
 
     static IConnectionSecurityManager create(SecurityConfig config) throws ConfigException {
         var securityType = config.getType();

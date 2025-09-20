@@ -5,6 +5,7 @@ import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.*;
 import org.apache.logging.log4j.LogManager;
@@ -52,12 +53,12 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
         } else if (msg.uri().startsWith("/files/")) {
             String fileName = URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8);
-            byte[] file = serverFileManager.findFile(fileName);
-            if (file == null) {
-                LOGGER.debug("Requested file {} not found", fileName);
+            ServerFileManager.ExposedFile exposedFile = serverFileManager.getExposedFile(fileName);
+            if (exposedFile == null) {
+                LOGGER.debug("Requested file {} not found or not exposed", fileName);
                 build404(ctx, msg);
             } else {
-                buildFileReply(ctx, msg, fileName, file);
+                buildFileReply(ctx, msg, exposedFile);
             }
         } else if (Objects.equals("/authenticate", msg.uri())) {
             LOGGER.info("Authentication request for client {}", determineClientIp(ctx, msg));
@@ -111,15 +112,16 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         ctx.writeAndFlush(resp);
     }
 
-    private void buildFileReply(final ChannelHandlerContext ctx, final FullHttpRequest msg, final String fileName, final byte[] file) {
-        final ByteBuf content = Unpooled.copiedBuffer(file);
-        FullHttpResponse resp = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, content);
-        HttpUtil.setKeepAlive(resp, HttpUtil.isKeepAlive(msg));
-        resp.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
-        resp.headers().set("filename", fileName);
-        HttpUtil.setContentLength(resp, content.writerIndex());
+    private void buildFileReply(final ChannelHandlerContext ctx, final FullHttpRequest msg, final ServerFileManager.ExposedFile file) {
+        final HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+        HttpUtil.setKeepAlive(response, HttpUtil.isKeepAlive(msg));
+        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
+        response.headers().set("filename", file.name());
+        HttpUtil.setContentLength(response, file.size());
+        this.connectionSecurityManager.onServerResponse(ctx, msg, response);
 
-        this.connectionSecurityManager.onServerResponse(ctx, msg, resp);
-        ctx.writeAndFlush(resp);
+        ctx.write(response);
+        ctx.write(new DefaultFileRegion(file.path().toFile(), 0, file.size()));
+        ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
     }
 }

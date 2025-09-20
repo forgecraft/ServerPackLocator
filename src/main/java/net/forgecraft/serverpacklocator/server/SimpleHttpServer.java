@@ -1,6 +1,8 @@
 package net.forgecraft.serverpacklocator.server;
 
 import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.mojang.logging.LogUtils;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.*;
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -9,27 +11,32 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-
-import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
 
 /**
  * Simple Http Server for serving file and manifest requests to clients.
  */
 public class SimpleHttpServer {
-    private static final Logger LOGGER = LogManager.getLogger();
+    private static final Logger LOGGER = LogUtils.getLogger();
+
+    private static final NioEventLoopGroup PARENT_GROUP = new NioEventLoopGroup(1, new ThreadFactoryBuilder()
+            .setNameFormat("ServerPack Locator Parent - %d")
+            .setDaemon(true)
+            .build());
+    private static final NioEventLoopGroup CHILD_GROUP = new NioEventLoopGroup(1, new ThreadFactoryBuilder()
+            .setNameFormat("ServerPack Locator Child - %d")
+            .setDaemon(true)
+            .build());
+
+    private static final int MAX_CONTENT_LENGTH = 2 << 19;
 
     private SimpleHttpServer() {
         throw new IllegalArgumentException("Can not instantiate SimpleHttpServer.");
     }
 
     public static void run(int port, IConnectionSecurityManager securityManager, ServerFileManager fileManager) {
-        EventLoopGroup masterGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Master - ", r));
-        EventLoopGroup slaveGroup = new NioEventLoopGroup(1, (Runnable r) -> newDaemonThread("ServerPack Locator Slave - ", r));
-
         final ServerBootstrap bootstrap = new ServerBootstrap()
-                .group(masterGroup, slaveGroup)
+                .group(PARENT_GROUP, CHILD_GROUP)
                 .channel(NioServerSocketChannel.class)
                 .handler(new ChannelInitializer<ServerSocketChannel>() {
                     @Override
@@ -46,7 +53,7 @@ public class SimpleHttpServer {
                     @Override
                     protected void initChannel(final SocketChannel ch) {
                         ch.pipeline().addLast("codec", new HttpServerCodec());
-                        ch.pipeline().addLast("aggregator", new HttpObjectAggregator(2 << 19));
+                        ch.pipeline().addLast("aggregator", new HttpObjectAggregator(MAX_CONTENT_LENGTH));
                         ch.pipeline().addLast("request", new RequestHandler(
                                 securityManager, fileManager
                         ));
@@ -55,13 +62,5 @@ public class SimpleHttpServer {
                 .option(ChannelOption.SO_BACKLOG, 128)
                 .childOption(ChannelOption.SO_KEEPALIVE, true);
         bootstrap.bind(port).syncUninterruptibly();
-    }
-
-    private static final AtomicInteger COUNT = new AtomicInteger(1);
-    static Thread newDaemonThread(final String namePrefix, Runnable task) {
-        Thread t = new Thread(task);
-        t.setName(namePrefix + COUNT.getAndIncrement());
-        t.setDaemon(true);
-        return t;
     }
 }

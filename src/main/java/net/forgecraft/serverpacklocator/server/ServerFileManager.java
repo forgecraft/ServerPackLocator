@@ -155,6 +155,9 @@ public class ServerFileManager {
 
     private void createWatchService() {
         LOGGER.info("Starting file watch service");
-        ServerSidedPackHandler.EXECUTOR_SERVICE.execute(new ServerFileWatchService(this));
+        Thread.ofPlatform()
+                .name("SPL File Watcher")
+                .daemon(true)
+                .start(new ServerFileWatchService(this));
     }
 }

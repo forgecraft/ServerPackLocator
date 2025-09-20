@@ -35,13 +35,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         }
     }
     private void handleGet(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
-        if (!msg.headers().contains("Authentication")) {
-            LOGGER.warn("Received unauthenticated request.");
-            build401(ctx, msg);
-            return;
-        }
-
-        if (!this.connectionSecurityManager.onServerConnectionRequest(ctx, msg)) {
+        if (!this.connectionSecurityManager.validateServerRequest(ctx, msg)) {
             LOGGER.warn("Received unauthorized request.");
             build401(ctx, msg);
             return;
@@ -59,7 +53,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
             } else {
                 buildFileReply(ctx, msg, exposedFile);
             }
-        } else if (Objects.equals("/authenticate", msg.uri())) {
+        } else if (connectionSecurityManager.needsAuthRequest() && Objects.equals("/authenticate", msg.uri())) {
             LOGGER.info("Authentication request for client {}", determineClientIp(ctx, msg));
             buildReply(ctx, msg, HttpResponseStatus.OK, "text/plain", "Authentication started.");
         } else {
@@ -107,7 +101,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         resp.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
         HttpUtil.setContentLength(resp, content.writerIndex());
 
-        this.connectionSecurityManager.onServerResponse(ctx, msg, resp);
+        this.connectionSecurityManager.decorateServerResponse(ctx, msg, resp);
         ctx.writeAndFlush(resp);
     }
 
@@ -117,7 +111,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
         response.headers().set("filename", file.name());
         HttpUtil.setContentLength(response, file.size());
-        this.connectionSecurityManager.onServerResponse(ctx, msg, response);
+        this.connectionSecurityManager.decorateServerResponse(ctx, msg, response);
 
         ctx.write(response);
         ctx.write(new DefaultFileRegion(file.path().toFile(), 0, file.size()));

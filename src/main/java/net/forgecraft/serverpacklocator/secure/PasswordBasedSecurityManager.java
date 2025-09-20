@@ -4,15 +4,11 @@ import com.google.common.hash.Hashing;
 import com.mojang.logging.LogUtils;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.HttpResponse;
 import net.forgecraft.serverpacklocator.ConfigException;
-import net.forgecraft.serverpacklocator.utils.NonceUtils;
 import org.slf4j.Logger;
 
-import javax.annotation.Nullable;
 import java.net.http.HttpRequest;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
 import java.util.Locale;
 
 public final class PasswordBasedSecurityManager implements IConnectionSecurityManager {
@@ -35,15 +31,15 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public void onClientConnectionCreation(final HttpRequest.Builder requestBuilder) {
+    public void decorateClientRequest(final HttpRequest.Builder requestBuilder, final boolean authenticated) {
         requestBuilder.header("Authentication", "Basic " + passwordHash);
     }
 
     @Override
-    public boolean onServerConnectionRequest(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
+    public boolean validateServerRequest(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
         final String authHeader = msg.headers().get("Authentication");
-        if (!authHeader.startsWith("Basic ")) {
-            LOGGER.warn("User tried to login with different authentication scheme: {}", authHeader);
+        if (authHeader == null || !authHeader.startsWith("Basic ")) {
+            LOGGER.warn("User tried to login with invalid authentication scheme: {}", authHeader);
             return false;
         }
         final String auth = authHeader.substring(6);
@@ -55,16 +51,7 @@ public final class PasswordBasedSecurityManager implements IConnectionSecurityMa
     }
 
     @Override
-    public void onServerResponse(final ChannelHandlerContext ctx, final FullHttpRequest msg, final HttpResponse resp) {
-        //We need to set a challenge for the client to respond to
-        //However we do not validate it at all in this security mode.
-        final String challenge = NonceUtils.createNonce();
-        resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
-    }
-
-    @Nullable
-    @Override
-    public String getUnavailabilityReason() {
-        return null;
+    public boolean needsAuthRequest() {
+        return false;
     }
 }

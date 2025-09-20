@@ -8,14 +8,14 @@ import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
 import com.mojang.logging.LogUtils;
-import io.netty.handler.codec.http.HttpResponse;
-import net.forgecraft.serverpacklocator.LaunchEnvironmentHandler;
-import net.forgecraft.serverpacklocator.utils.NonceUtils;
 import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpResponse;
+import net.forgecraft.serverpacklocator.LaunchEnvironmentHandler;
+import net.forgecraft.serverpacklocator.utils.NonceUtils;
 import net.neoforged.api.distmarker.Dist;
 import org.slf4j.Logger;
 
@@ -33,6 +33,7 @@ import java.time.format.DateTimeParseException;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -47,7 +48,8 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private final UUID sessionId;
     private final SignatureValidator validator;
 
-    private String challengePayload = "";
+    @Nullable
+    private String nextChallengeSignature;
 
     public ProfileKeyPairBasedSecurityManager() {
         signingHandler = getSigningHandler();
@@ -179,11 +181,19 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         return Hashing.sha256().hashString(target, StandardCharsets.UTF_8);
     }
 
+    private static HashCode digest(byte[] payload) {
+        return Hashing.sha256().hashBytes(payload);
+    }
+
     private static String sign(final UUID payload, final Signer signer) {
         return signDigest(digest(payload), signer);
     }
 
     private static String sign(final String payload, final Signer signer) {
+        return signDigest(digest(payload), signer);
+    }
+
+    private static String sign(final byte[] payload, final Signer signer) {
         return signDigest(digest(payload), signer);
     }
 
@@ -201,9 +211,9 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void onClientConnectionCreation(HttpRequest.Builder requestBuilder)
+    public void decorateClientRequest(final HttpRequest.Builder requestBuilder, final boolean authenticated)
     {
-        if (signingHandler == null || sessionId.compareTo(DEFAULT_NILL_UUID) == 0) {
+        if (signingHandler == null || sessionId.equals(DEFAULT_NILL_UUID)) {
             LOGGER.warn("No signing handler is available for the current session (Missing keypair). Stuff might not work since we can not sign the requests!");
             return;
         }
@@ -215,20 +225,27 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         requestBuilder.header("AuthenticationKeyExpire", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().expiresAt().toString().getBytes(StandardCharsets.UTF_8)));
         requestBuilder.header("AuthenticationKeyExpireDigest", sign(signingHandler.keyPair().publicKeyData().expiresAt().toString(), signingHandler.signer()));
         requestBuilder.header("AuthenticationKeySignature", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().publicKeySignature()));
+
+        if (nextChallengeSignature != null && authenticated) {
+            requestBuilder.header("ChallengeSignature", nextChallengeSignature);
+        }
     }
 
     @Override
-    public void onAuthenticateComplete(String challengeString) {
-        this.challengePayload = sign(challengeString, signingHandler.signer());
+    public void handleClientResponse(final java.net.http.HttpResponse<?> response) {
+        final Optional<String> encodedChallenge = response.headers().firstValue("Challenge");
+        if (encodedChallenge.isEmpty()) {
+            return;
+        }
+
+        LOGGER.debug("Got new challenge: {}", encodedChallenge.get());
+
+        final byte[] challenge = Base64.getDecoder().decode(encodedChallenge.get());
+        nextChallengeSignature = sign(challenge, signingHandler.signer());
     }
 
     @Override
-    public void authenticateConnection(HttpRequest.Builder requestBuilder) {
-        requestBuilder.header("ChallengeSignature", this.challengePayload);
-    }
-
-    @Override
-    public boolean onServerConnectionRequest(ChannelHandlerContext ctx, final FullHttpRequest msg)
+    public boolean validateServerRequest(ChannelHandlerContext ctx, final FullHttpRequest msg)
     {
         final var headers = msg.headers();
         final String authentication = headers.get("Authentication");
@@ -343,7 +360,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 return false;
             }
 
-            challenge = currentChallenges.get(sessionId);
+            challenge = currentChallenges.remove(sessionId);
             if (challenge == null) {
                 LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: {}", new String(challengeSignature, StandardCharsets.UTF_8));
                 return false;
@@ -399,14 +416,12 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, HttpResponse resp) {
-        final String challenge = NonceUtils.createNonce();
-
+    public void decorateServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, HttpResponse resp) {
         final UUID sessionId = getSessionId(msg.headers());
         if (sessionId == null) {
             return;
         }
-
+        final String challenge = NonceUtils.createNonce();
         currentChallenges.put(sessionId, challenge);
         resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
     }
@@ -453,5 +468,10 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
             }
         }
         return null;
+    }
+
+    @Override
+    public boolean needsAuthRequest() {
+        return true;
     }
 }

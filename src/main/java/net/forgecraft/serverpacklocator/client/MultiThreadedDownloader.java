@@ -49,6 +49,9 @@ public class MultiThreadedDownloader {
     }
 
     private void authenticate() throws IOException, InterruptedException {
+        if (!connectionSecurityManager.needsAuthRequest()) {
+            return;
+        }
         var progressBar = StartupNotificationManager.addProgressBar("SPL is authenticating...", 1);
         try {
             makeRequest("authenticate", false, HttpResponse.BodyHandlers.discarding());
@@ -57,19 +60,12 @@ public class MultiThreadedDownloader {
         }
     }
 
-    private void processChallengeString(String challengeStr) {
-        LOGGER.info("Got Challenge {}", challengeStr);
-        var challenge = Base64.getDecoder().decode(challengeStr);
-        this.connectionSecurityManager.onAuthenticateComplete(new String(challenge, StandardCharsets.UTF_8));
-    }
-
     private PreparedServerDownloadData downloadManifest() throws IOException, InterruptedException {
         authenticate();
         var progressBar = StartupNotificationManager.addProgressBar("Requesting server manifest...", 1);
         try {
             var response = makeRequest("servermanifest.json", true, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-
-            response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
+            this.connectionSecurityManager.handleClientResponse(response);
 
             var serverManifest = ServerManifest.fromString(response.body());
 
@@ -99,14 +95,10 @@ public class MultiThreadedDownloader {
 
         LOGGER.info("ServerPackLocator is requesting {}...", requestUri);
 
-        var requestBuilder = HttpRequest.newBuilder(requestUri);
-        this.connectionSecurityManager.onClientConnectionCreation(requestBuilder);
-        if (authenticated) {
-            this.connectionSecurityManager.authenticateConnection(requestBuilder);
-        }
-        var request = requestBuilder.build();
-        var response = httpClient.send(request, bodyHandler);
-        response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
+        var request = HttpRequest.newBuilder(requestUri);
+        this.connectionSecurityManager.decorateClientRequest(request, authenticated);
+        var response = httpClient.send(request.build(), bodyHandler);
+        this.connectionSecurityManager.handleClientResponse(response);
         if (response.statusCode() != 200) {
             throw new IOException("Got HTTP Status Code " + response.statusCode() + " for " + requestUri);
         }
@@ -270,15 +262,13 @@ public class MultiThreadedDownloader {
         final Path destinationPath = fileToDownload.localFile();
         Files.createDirectories(destinationPath.getParent());
 
-        final HttpResponse<Path> response = makeRequest(
+        makeRequest(
                 "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20"),
                 true,
                 progressListener.trackBodyHandler(
                         HttpResponse.BodyHandlers.ofFile(destinationPath, StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
                 )
         );
-
-        response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
 
         // Validate that the downloaded file actually matches the expected checksum
         final HashCode downloadChecksum = FileChecksumValidator.computeChecksumFor(destinationPath);

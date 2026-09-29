@@ -1,19 +1,32 @@
 package net.forgecraft.serverpacklocator.server;
 
-import net.forgecraft.serverpacklocator.ModAccessor;
-import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpChunkedInput;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.stream.ChunkedStream;
+import net.forgecraft.serverpacklocator.ModAccessor;
+import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.net.ssl.SSLException;
+import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Objects;
 
 class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
@@ -106,15 +119,19 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     }
 
     private void buildFileReply(final ChannelHandlerContext ctx, final FullHttpRequest msg, final ServerFileManager.ExposedFile file) {
-        final HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-        HttpUtil.setKeepAlive(response, HttpUtil.isKeepAlive(msg));
-        response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
-        response.headers().set("filename", file.name());
-        HttpUtil.setContentLength(response, file.size());
-        this.connectionSecurityManager.decorateServerResponse(ctx, msg, response);
+        try (var fileStream = Files.newInputStream(file.path())) {
+            var out = new HttpChunkedInput(new ChunkedStream(fileStream));
 
-        ctx.write(response);
-        ctx.write(new DefaultFileRegion(file.path().toFile(), 0, file.size()));
-        ctx.writeAndFlush(LastHttpContent.EMPTY_LAST_CONTENT);
+            final HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+            HttpUtil.setKeepAlive(response, HttpUtil.isKeepAlive(msg));
+            response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
+            response.headers().set("filename", file.name());
+            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+
+            ctx.write(response);
+            ctx.writeAndFlush(out);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

@@ -4,23 +4,26 @@ import com.google.common.hash.HashCode;
 import net.forgecraft.serverpacklocator.FileChecksumValidator;
 import net.forgecraft.serverpacklocator.ServerManifest;
 import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
+import net.forgecraft.serverpacklocator.utils.CompressionUtils;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
 import java.util.OptionalLong;
@@ -64,10 +67,35 @@ public class MultiThreadedDownloader {
         authenticate();
         var progressBar = StartupNotificationManager.addProgressBar("Requesting server manifest...", 1);
         try {
-            var response = makeRequest("servermanifest.json", true, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            var response = makeRequest("servermanifest.json", true, responseInfo -> HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofInputStream(), in -> {
+                Function<InputStream, InputStream> decompressor = s -> s;
+                var encoding = responseInfo.headers().firstValue("Content-Encoding").orElse(null);
+                if (encoding != null) {
+                    var methodNames = encoding.split(",");
+                    for (int i = methodNames.length - 1; i >= 0; i--) {
+                        var method = CompressionUtils.methodFromName(methodNames[i].trim());
+                        if (method != null) {
+                            decompressor = decompressor.andThen(s -> {
+                                try {
+                                    return method.decompress(s);
+                                } catch (IOException e) {
+                                    LOGGER.error(e);
+                                    throw new RuntimeException(e);
+                                }
+                            });
+                        }
+                    }
+                }
+
+                return decompressor.apply(in);
+            }));
+
             this.connectionSecurityManager.handleClientResponse(response);
 
-            var serverManifest = ServerManifest.fromString(response.body());
+            ServerManifest serverManifest;
+            try (var stream = response.body()) {
+                serverManifest = ServerManifest.fromString(String.valueOf(StandardCharsets.UTF_8.decode(ByteBuffer.wrap(stream.readAllBytes()))));
+            }
 
             // Write the file to the client system for debugging
             if (serverManifest != null) {
@@ -96,6 +124,7 @@ public class MultiThreadedDownloader {
         LOGGER.info("ServerPackLocator is requesting {}...", requestUri);
 
         var request = HttpRequest.newBuilder(requestUri);
+        request.header("Accept-Encoding", "gzip");
         this.connectionSecurityManager.decorateClientRequest(request, authenticated);
         var response = httpClient.send(request.build(), bodyHandler);
         this.connectionSecurityManager.handleClientResponse(response);
@@ -265,9 +294,37 @@ public class MultiThreadedDownloader {
         makeRequest(
                 "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20"),
                 true,
-                progressListener.trackBodyHandler(
-                        HttpResponse.BodyHandlers.ofFile(destinationPath, StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
-                )
+                progressListener.trackBodyHandler((HttpResponse.BodyHandler<Path>) responseInfo -> {
+                    Function<InputStream, InputStream> decompressor = s -> s;
+                    var encoding = responseInfo.headers().firstValue("Content-Encoding").orElse(null);
+                    if (encoding != null) {
+                        var methodNames = encoding.split(",");
+                        for (int i = methodNames.length - 1; i >= 0; i--) {
+                            var method = CompressionUtils.methodFromName(methodNames[i].trim());
+                            if (method != null) {
+                                decompressor = decompressor.andThen(s -> {
+                                    try {
+                                        return method.decompress(s);
+                                    } catch (IOException e) {
+                                        LOGGER.error(e);
+                                        throw new RuntimeException(e);
+                                    }
+                                });
+                            }
+                        }
+                    }
+
+                    var downstream = HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofInputStream(), decompressor);
+                    return HttpResponse.BodySubscribers.mapping(downstream, s -> {
+                        try (var out = Channels.newOutputStream(FileChannel.open(fileToDownload.localFile(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))){
+                            s.transferTo(out);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
+
+                        return fileToDownload.localFile();
+                    });
+                })
         );
 
         // Validate that the downloaded file actually matches the expected checksum

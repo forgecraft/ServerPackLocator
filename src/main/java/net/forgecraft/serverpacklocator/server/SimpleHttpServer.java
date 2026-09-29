@@ -1,16 +1,21 @@
 package net.forgecraft.serverpacklocator.server;
 
-import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.mojang.logging.LogUtils;
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.*;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.HttpContentCompressor;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpServerCodec;
+import io.netty.handler.stream.ChunkedWriteHandler;
+import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import org.slf4j.Logger;
 
 /**
@@ -53,6 +58,8 @@ public class SimpleHttpServer {
                     @Override
                     protected void initChannel(final SocketChannel ch) {
                         ch.pipeline().addLast("codec", new HttpServerCodec());
+                        ch.pipeline().addLast("deflater", new HttpContentCompressor());
+                        ch.pipeline().addLast("chunkedWriter", new ChunkedWriteHandler());
                         ch.pipeline().addLast("aggregator", new HttpObjectAggregator(MAX_CONTENT_LENGTH));
                         ch.pipeline().addLast("request", new RequestHandler(
                                 securityManager, fileManager

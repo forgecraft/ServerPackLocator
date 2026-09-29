@@ -1,18 +1,32 @@
 package net.forgecraft.serverpacklocator.server;
 
-import net.forgecraft.serverpacklocator.ModAccessor;
-import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpChunkedInput;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.stream.ChunkedStream;
+import net.forgecraft.serverpacklocator.ModAccessor;
+import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import javax.net.ssl.SSLException;
+import java.io.IOException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Objects;
 
 class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
@@ -34,13 +48,7 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         }
     }
     private void handleGet(final ChannelHandlerContext ctx, final FullHttpRequest msg) {
-        if (!msg.headers().contains("Authentication")) {
-            LOGGER.warn("Received unauthenticated request.");
-            build401(ctx, msg);
-            return;
-        }
-
-        if (!this.connectionSecurityManager.onServerConnectionRequest(ctx, msg)) {
+        if (!this.connectionSecurityManager.validateServerRequest(ctx, msg)) {
             LOGGER.warn("Received unauthorized request.");
             build401(ctx, msg);
             return;
@@ -48,18 +56,17 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
         if (Objects.equals("/servermanifest.json", msg.uri())) {
             LOGGER.info("Manifest request for client {}", determineClientIp(ctx, msg));
-            final String s = serverFileManager.getManifest().toJson();
-            buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", s);
+            buildReply(ctx, msg, HttpResponseStatus.OK, "application/json", serverFileManager.getManifestJson());
         } else if (msg.uri().startsWith("/files/")) {
             String fileName = URLDecoder.decode(msg.uri().substring(7), StandardCharsets.UTF_8);
-            byte[] file = serverFileManager.findFile(fileName);
-            if (file == null) {
-                LOGGER.debug("Requested file {} not found", fileName);
+            ServerFileManager.ExposedFile exposedFile = serverFileManager.getExposedFile(fileName);
+            if (exposedFile == null) {
+                LOGGER.debug("Requested file {} not found or not exposed", fileName);
                 build404(ctx, msg);
             } else {
-                buildFileReply(ctx, msg, fileName, file);
+                buildFileReply(ctx, msg, exposedFile);
             }
-        } else if (Objects.equals("/authenticate", msg.uri())) {
+        } else if (connectionSecurityManager.needsAuthRequest() && Objects.equals("/authenticate", msg.uri())) {
             LOGGER.info("Authentication request for client {}", determineClientIp(ctx, msg));
             buildReply(ctx, msg, HttpResponseStatus.OK, "text/plain", "Authentication started.");
         } else {
@@ -107,19 +114,24 @@ class RequestHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         resp.headers().set(HttpHeaderNames.CONTENT_TYPE, contentType);
         HttpUtil.setContentLength(resp, content.writerIndex());
 
-        this.connectionSecurityManager.onServerResponse(ctx, msg, resp);
+        this.connectionSecurityManager.decorateServerResponse(ctx, msg, resp);
         ctx.writeAndFlush(resp);
     }
 
-    private void buildFileReply(final ChannelHandlerContext ctx, final FullHttpRequest msg, final String fileName, final byte[] file) {
-        final ByteBuf content = Unpooled.copiedBuffer(file);
-        FullHttpResponse resp = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK, content);
-        HttpUtil.setKeepAlive(resp, HttpUtil.isKeepAlive(msg));
-        resp.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
-        resp.headers().set("filename", fileName);
-        HttpUtil.setContentLength(resp, content.writerIndex());
+    private void buildFileReply(final ChannelHandlerContext ctx, final FullHttpRequest msg, final ServerFileManager.ExposedFile file) {
+        try (var fileStream = Files.newInputStream(file.path())) {
+            var out = new HttpChunkedInput(new ChunkedStream(fileStream));
 
-        this.connectionSecurityManager.onServerResponse(ctx, msg, resp);
-        ctx.writeAndFlush(resp);
+            final HttpResponse response = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+            HttpUtil.setKeepAlive(response, HttpUtil.isKeepAlive(msg));
+            response.headers().set(HttpHeaderNames.CONTENT_TYPE, "application/octet-stream");
+            response.headers().set("filename", file.name());
+            response.headers().set(HttpHeaderNames.TRANSFER_ENCODING, HttpHeaderValues.CHUNKED);
+
+            ctx.write(response);
+            ctx.writeAndFlush(out);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

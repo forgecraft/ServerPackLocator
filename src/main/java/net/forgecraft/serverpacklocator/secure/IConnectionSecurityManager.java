@@ -1,45 +1,39 @@
 package net.forgecraft.serverpacklocator.secure;
 
-import net.forgecraft.serverpacklocator.ConfigException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpResponse;
+import net.forgecraft.serverpacklocator.ConfigException;
 
 import javax.annotation.Nullable;
-import java.net.URLConnection;
 import java.net.http.HttpRequest;
 
 public interface IConnectionSecurityManager
 {
-    void onClientConnectionCreation(HttpRequest.Builder requestBuilder);
-
-    default void onAuthenticateComplete(String challengeString) {
+    default void decorateClientRequest(final HttpRequest.Builder requestBuilder, final boolean authenticated) {
     }
 
-    default void authenticateConnection(HttpRequest.Builder requestBuilder) {
+    default void handleClientResponse(final java.net.http.HttpResponse<?> response) {
     }
 
-    boolean onServerConnectionRequest(ChannelHandlerContext ctx, FullHttpRequest msg);
+    boolean validateServerRequest(ChannelHandlerContext ctx, FullHttpRequest msg);
 
-    void initialize(SecurityConfig config) throws ConfigException;
+    default void decorateServerResponse(final ChannelHandlerContext ctx, final FullHttpRequest msg, final HttpResponse resp) {
+    }
 
-    void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp);
-
-    static IConnectionSecurityManager create(SecurityConfig config) throws ConfigException {
-        var securityType = config.getType();
-        if (securityType == null) {
-            throw new ConfigException("No securityType is set.");
-        }
-
-        var securityManager = switch (securityType) {
-            case PASSWORD -> PasswordBasedSecurityManager.getInstance();
-            case PUBLICKEY -> ProfileKeyPairBasedSecurityManager.getInstance();
+    static IConnectionSecurityManager create(final SecurityConfig config) throws ConfigException {
+        return switch (config.getType()) {
+            case NONE -> NullSecurityManager.INSTANCE;
+            case PASSWORD -> new PasswordBasedSecurityManager(config);
+            case PUBLICKEY -> new ProfileKeyPairBasedSecurityManager();
+            case null -> throw new ConfigException("No securityType is set.");
         };
-
-        securityManager.initialize(config);
-        return securityManager;
     }
 
     @Nullable
-    String getUnavailabilityReason();
+    default String getUnavailabilityReason() {
+        return null;
+    }
+
+    boolean needsAuthRequest();
 }

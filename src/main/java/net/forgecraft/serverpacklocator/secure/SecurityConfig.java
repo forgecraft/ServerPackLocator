@@ -46,6 +46,7 @@ public class SecurityConfig {
     }
 
     public enum SecurityType {
+        NONE,
         PASSWORD,
         PUBLICKEY
     }

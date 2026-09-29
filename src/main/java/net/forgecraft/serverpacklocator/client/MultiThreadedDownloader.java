@@ -1,31 +1,34 @@
 package net.forgecraft.serverpacklocator.client;
 
+import com.google.common.hash.HashCode;
 import net.forgecraft.serverpacklocator.FileChecksumValidator;
 import net.forgecraft.serverpacklocator.ServerManifest;
 import net.forgecraft.serverpacklocator.secure.IConnectionSecurityManager;
-import net.neoforged.fml.loading.ImmediateWindowHandler;
+import net.forgecraft.serverpacklocator.utils.CompressionUtils;
 import net.neoforged.fml.loading.progress.StartupNotificationManager;
-import org.apache.commons.lang3.mutable.MutableLong;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
+import java.util.OptionalLong;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.Flow;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -49,6 +52,9 @@ public class MultiThreadedDownloader {
     }
 
     private void authenticate() throws IOException, InterruptedException {
+        if (!connectionSecurityManager.needsAuthRequest()) {
+            return;
+        }
         var progressBar = StartupNotificationManager.addProgressBar("SPL is authenticating...", 1);
         try {
             makeRequest("authenticate", false, HttpResponse.BodyHandlers.discarding());
@@ -57,21 +63,39 @@ public class MultiThreadedDownloader {
         }
     }
 
-    private void processChallengeString(String challengeStr) {
-        LOGGER.info("Got Challenge {}", challengeStr);
-        var challenge = Base64.getDecoder().decode(challengeStr);
-        this.connectionSecurityManager.onAuthenticateComplete(new String(challenge, StandardCharsets.UTF_8));
-    }
-
     private PreparedServerDownloadData downloadManifest() throws IOException, InterruptedException {
         authenticate();
         var progressBar = StartupNotificationManager.addProgressBar("Requesting server manifest...", 1);
         try {
-            var response = makeRequest("servermanifest.json", true, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            var response = makeRequest("servermanifest.json", true, responseInfo -> HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofInputStream(), in -> {
+                Function<InputStream, InputStream> decompressor = s -> s;
+                var encoding = responseInfo.headers().firstValue("Content-Encoding").orElse(null);
+                if (encoding != null) {
+                    var methodNames = encoding.split(",");
+                    for (int i = methodNames.length - 1; i >= 0; i--) {
+                        var method = CompressionUtils.methodFromName(methodNames[i].trim());
+                        if (method != null) {
+                            decompressor = decompressor.andThen(s -> {
+                                try {
+                                    return method.decompress(s);
+                                } catch (IOException e) {
+                                    LOGGER.error(e);
+                                    throw new RuntimeException(e);
+                                }
+                            });
+                        }
+                    }
+                }
 
-            response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
+                return decompressor.apply(in);
+            }));
 
-            var serverManifest = ServerManifest.fromString(response.body());
+            this.connectionSecurityManager.handleClientResponse(response);
+
+            ServerManifest serverManifest;
+            try (var stream = response.body()) {
+                serverManifest = ServerManifest.fromString(String.valueOf(StandardCharsets.UTF_8.decode(ByteBuffer.wrap(stream.readAllBytes()))));
+            }
 
             // Write the file to the client system for debugging
             if (serverManifest != null) {
@@ -99,14 +123,11 @@ public class MultiThreadedDownloader {
 
         LOGGER.info("ServerPackLocator is requesting {}...", requestUri);
 
-        var requestBuilder = HttpRequest.newBuilder(requestUri);
-        this.connectionSecurityManager.onClientConnectionCreation(requestBuilder);
-        if (authenticated) {
-            this.connectionSecurityManager.authenticateConnection(requestBuilder);
-        }
-        var request = requestBuilder.build();
-        var response = httpClient.send(request, bodyHandler);
-        response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
+        var request = HttpRequest.newBuilder(requestUri);
+        request.header("Accept-Encoding", "gzip");
+        this.connectionSecurityManager.decorateClientRequest(request, authenticated);
+        var response = httpClient.send(request.build(), bodyHandler);
+        this.connectionSecurityManager.handleClientResponse(response);
         if (response.statusCode() != 200) {
             throw new IOException("Got HTTP Status Code " + response.statusCode() + " for " + requestUri);
         }
@@ -141,14 +162,9 @@ public class MultiThreadedDownloader {
                 for (var fileToDownload : filesToDownload) {
                     var bytesDownloadedAtStartOfFile = bytesDownloaded;
                     progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile));
-                    MutableLong lastRenderTick = new MutableLong(System.currentTimeMillis());
-                    progressBar.label("Downloading " + fileToDownload.localFile.getName() + "...");
+                    progressBar.label("Downloading " + fileToDownload.localFile.getFileName().toString() + "...");
                     downloadFile(fileToDownload, (downloaded, total) -> {
                         progressBar.setAbsolute(toDownloadProgress(bytesDownloadedAtStartOfFile + downloaded));
-                        if (System.currentTimeMillis() - lastRenderTick.getValue() >= 50L) {
-                            ImmediateWindowHandler.renderTick();
-                            lastRenderTick.setValue(System.currentTimeMillis());
-                        }
                     });
                     // The original estimate was based on this, and the progress bar should reflect it
                     // even if the server sent a different size
@@ -207,7 +223,7 @@ public class MultiThreadedDownloader {
                 var filePath = outputDir.resolve(fileData.relativePath());
                 var downloadFilePath = downloadDir.resolve(fileData.relativePath());
 
-                final String existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
+                final HashCode existingChecksum = FileChecksumValidator.computeChecksumFor(filePath);
                 if (Objects.equals(fileData.checksum(), existingChecksum)) {
                     LOGGER.debug("Found existing file {} - skipping", fileData.relativePath());
                     continue;
@@ -220,7 +236,7 @@ public class MultiThreadedDownloader {
 
                 var relativeUrl = rootDir.relativize(filePath).toString().replace("\\", "/");
                 var relativeDownloadPath = rootDir.relativize(downloadFilePath).toString().replace("\\", "/");
-                filesToDownload.add(new FileToDownload(relativeUrl, relativeDownloadPath, filePath.toFile(), fileData.size(), fileData.checksum()));
+                filesToDownload.add(new FileToDownload(relativeUrl, relativeDownloadPath, filePath, fileData.size(), fileData.checksum()));
             }
         }
 
@@ -268,48 +284,109 @@ public class MultiThreadedDownloader {
         return filesToDownload;
     }
 
-    private void downloadFile(FileToDownload fileToDownload, ProgressListener progressListener) throws IOException, InterruptedException {
-        var nextFile = fileToDownload.relativeDownloadPath();
-
+    private void downloadFile(final FileToDownload fileToDownload, final ProgressListener progressListener) throws IOException, InterruptedException {
+        final String nextFile = fileToDownload.relativeDownloadPath();
         LOGGER.info("Requesting file {}", nextFile);
-        var path = "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20");
 
-        var response = makeRequest(path, true, HttpResponse.BodyHandlers.ofInputStream());
+        final Path destinationPath = fileToDownload.localFile();
+        Files.createDirectories(destinationPath.getParent());
 
-        File file = fileToDownload.localFile();
-        file.getParentFile().mkdirs();
+        makeRequest(
+                "files/" + URLEncoder.encode(nextFile, StandardCharsets.UTF_8).replace("+", "%20"),
+                true,
+                progressListener.trackBodyHandler((HttpResponse.BodyHandler<Path>) responseInfo -> {
+                    Function<InputStream, InputStream> decompressor = s -> s;
+                    var encoding = responseInfo.headers().firstValue("Content-Encoding").orElse(null);
+                    if (encoding != null) {
+                        var methodNames = encoding.split(",");
+                        for (int i = methodNames.length - 1; i >= 0; i--) {
+                            var method = CompressionUtils.methodFromName(methodNames[i].trim());
+                            if (method != null) {
+                                decompressor = decompressor.andThen(s -> {
+                                    try {
+                                        return method.decompress(s);
+                                    } catch (IOException e) {
+                                        LOGGER.error(e);
+                                        throw new RuntimeException(e);
+                                    }
+                                });
+                            }
+                        }
+                    }
 
-        response.headers().firstValue("Challenge").ifPresent(this::processChallengeString);
+                    var downstream = HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofInputStream(), decompressor);
+                    return HttpResponse.BodySubscribers.mapping(downstream, s -> {
+                        try (var out = Channels.newOutputStream(FileChannel.open(fileToDownload.localFile(), StandardOpenOption.WRITE, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))){
+                            s.transferTo(out);
+                        } catch (IOException e) {
+                            throw new RuntimeException(e);
+                        }
 
-        var totalBytes = response.headers().firstValueAsLong("Content-Length").orElse(fileToDownload.size());
-
-        try (var outputStream = new FileOutputStream(file); var download = outputStream.getChannel();
-             ReadableByteChannel channel = Channels.newChannel(response.body())) {
-            while ((download.transferFrom(channel, file.length(), 8192)) > 0) {
-                progressListener.onProgress(file.length(), totalBytes);
-            }
-        } catch (IOException e) {
-            // Re-wrap the IO exception to give information about which path failed
-            throw new IOException("Download of " + path + " failed: " + e, e);
-        }
+                        return fileToDownload.localFile();
+                    });
+                })
+        );
 
         // Validate that the downloaded file actually matches the expected checksum
-        var downloadChecksum = FileChecksumValidator.computeChecksumFor(file.toPath());
+        final HashCode downloadChecksum = FileChecksumValidator.computeChecksumFor(destinationPath);
         if (!Objects.equals(downloadChecksum, fileToDownload.checksum)) {
-            throw new IOException("Downloaded file (" + file.toPath() + ") has checksum " + downloadChecksum + " but expected " + fileToDownload.checksum + " (" + fileToDownload.relativeDownloadPath + ")");
+            throw new IOException("Downloaded file (" + destinationPath + ") has checksum " + downloadChecksum + " but expected " + fileToDownload.checksum + " (" + fileToDownload.relativeDownloadPath + ")");
         }
     }
 
     @FunctionalInterface
     interface ProgressListener {
+        default <T> HttpResponse.BodyHandler<T> trackBodyHandler(final HttpResponse.BodyHandler<T> upstreamHandler) {
+            return responseInfo -> {
+                final HttpResponse.BodySubscriber<T> upstream = upstreamHandler.apply(responseInfo);
+
+                final OptionalLong contentLength = responseInfo.headers().firstValueAsLong("Content-Length");
+                if (contentLength.isEmpty()) {
+                    return upstream;
+                }
+
+                return new HttpResponse.BodySubscriber<>() {
+                    private long receivedBytes;
+
+                    @Override
+                    public CompletionStage<T> getBody() {
+                        return upstream.getBody();
+                    }
+
+                    @Override
+                    public void onSubscribe(final Flow.Subscription subscription) {
+                        upstream.onSubscribe(subscription);
+                    }
+
+                    @Override
+                    public void onNext(final List<ByteBuffer> item) {
+                        upstream.onNext(item);
+                        for (final ByteBuffer buffer : item) {
+                            receivedBytes += buffer.capacity();
+                        }
+                        onProgress(receivedBytes, contentLength.getAsLong());
+                    }
+
+                    @Override
+                    public void onError(final Throwable throwable) {
+                        upstream.onError(throwable);
+                    }
+
+                    @Override
+                    public void onComplete() {
+                        upstream.onComplete();
+                    }
+                };
+            };
+        }
+
         void onProgress(long downloaded, long expectedSize);
     }
 
-    record FileToDownload(String relativeUrl, String relativeDownloadPath, File localFile, long size, String checksum) {
+    record FileToDownload(String relativeUrl, String relativeDownloadPath, Path localFile, long size, HashCode checksum) {
     }
 
     public record PreparedServerDownloadData(ServerManifest manifest,
                                              List<ClientConfig.DownloadedServerContent> directoryContent) {
     }
 }
-

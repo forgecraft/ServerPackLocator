@@ -1,33 +1,31 @@
 package net.forgecraft.serverpacklocator.secure;
 
+import com.google.common.hash.HashCode;
+import com.google.common.hash.Hashing;
 import com.mojang.authlib.minecraft.UserApiService;
 import com.mojang.authlib.yggdrasil.ServicesKeySet;
 import com.mojang.authlib.yggdrasil.ServicesKeyType;
 import com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService;
 import com.mojang.authlib.yggdrasil.response.KeyPairResponse;
-import net.forgecraft.serverpacklocator.ConfigException;
-import net.forgecraft.serverpacklocator.LaunchEnvironmentHandler;
-import net.forgecraft.serverpacklocator.utils.NonceUtils;
+import com.mojang.logging.LogUtils;
 import cpw.mods.modlauncher.ArgumentHandler;
 import cpw.mods.modlauncher.Launcher;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
-import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaders;
-import net.neoforged.api.distmarker.Dist;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import io.netty.handler.codec.http.HttpResponse;
+import net.forgecraft.serverpacklocator.utils.NonceUtils;
+import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.fml.loading.progress.StartupNotificationManager;
+import org.slf4j.Logger;
 
 import javax.annotation.Nullable;
 import java.lang.reflect.Field;
 import java.net.Proxy;
-import java.net.URLConnection;
 import java.net.http.HttpRequest;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.time.Instant;
@@ -35,30 +33,25 @@ import java.time.format.DateTimeParseException;
 import java.util.Base64;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecurityManager
 {
-    private static final Logger LOGGER = LogManager.getLogger();
-    private static final ProfileKeyPairBasedSecurityManager INSTANCE = new ProfileKeyPairBasedSecurityManager();
+    private static final Logger LOGGER = LogUtils.getLogger();
     private static final UUID DEFAULT_NILL_UUID = new UUID(0L, 0L);
 
     private final Map<UUID, String> currentChallenges = new ConcurrentHashMap<>();
-
-    public static ProfileKeyPairBasedSecurityManager getInstance()
-    {
-        return INSTANCE;
-    }
 
     private final SigningHandler signingHandler;
     private final UUID sessionId;
     private final SignatureValidator validator;
 
-    private String challengePayload = "";
+    @Nullable
+    private String nextChallengeSignature;
 
-    private ProfileKeyPairBasedSecurityManager()
-    {
+    public ProfileKeyPairBasedSecurityManager() {
         signingHandler = getSigningHandler();
         sessionId = getSessionId();
         validator = getSignatureValidator();
@@ -89,7 +82,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         }
     }
 
-    private static String getAccessToken() {
+    private static @Nullable String getAccessToken() {
         final String[] arguments = getLaunchArguments();
         for (int i = 0; i < arguments.length; i++)
         {
@@ -122,7 +115,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     private static UserApiService getApiService() {
         final String accessToken = getAccessToken();
         final YggdrasilAuthenticationService authenticationService = getAuthenticationService();
-        if (accessToken.isBlank())
+        if (accessToken == null || accessToken.isBlank())
             return UserApiService.OFFLINE;
 
         return authenticationService.createUserApiService(accessToken);
@@ -140,9 +133,9 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
 
         return new ProfileKeyPair(Crypt.stringToPemRsaPrivateKey(keyPairResponse.keyPair().privateKey()),
                 new PublicKeyData(
-                Crypt.stringToRsaPublicKey(keyPairResponse.keyPair().publicKey()),
-                Instant.parse(keyPairResponse.expiresAt()),
-                keyPairResponse.publicKeySignature().array()));
+                        Crypt.stringToRsaPublicKey(keyPairResponse.keyPair().publicKey()),
+                        Instant.parse(keyPairResponse.expiresAt()),
+                        keyPairResponse.publicKeySignature().array()));
     }
 
     private static SigningHandler getSigningHandler() {
@@ -177,72 +170,50 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         }
     }
 
-    private static byte[] digest(final UUID target)
-    {
-        final byte[] payload = new byte[16];
-        ByteBuffer.wrap(payload).order(ByteOrder.BIG_ENDIAN).putLong(target.getMostSignificantBits()).putLong(target.getLeastSignificantBits());
-
-        return digest(payload);
+    private static HashCode digest(final UUID target) {
+        return Hashing.sha256().newHasher(Long.BYTES * 2)
+                .putLong(target.getMostSignificantBits())
+                .putLong(target.getLeastSignificantBits())
+                .hash();
     }
 
-    private static byte[] digest(final String target)
-    {
-        final byte[] sessionIdPayload = target.getBytes(StandardCharsets.UTF_8);
-
-        return digest(sessionIdPayload);
+    private static HashCode digest(final String target) {
+        return Hashing.sha256().hashString(target, StandardCharsets.UTF_8);
     }
 
-    private static byte[] digest(byte[] payload) {
-        try
-        {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return md.digest(payload);
-        }
-        catch (NoSuchAlgorithmException e)
-        {
-            throw new RuntimeException("Failed to get SHA-256 message digest", e);
-        }
+    private static HashCode digest(byte[] payload) {
+        return Hashing.sha256().hashBytes(payload);
     }
 
     private static String sign(final UUID payload, final Signer signer) {
-        byte[] messageHash = digest(payload);
-
-        return signDigest(messageHash, signer);
+        return signDigest(digest(payload), signer);
     }
 
     private static String sign(final String payload, final Signer signer) {
-        byte[] messageHash = digest(payload);
-
-        return signDigest(messageHash, signer);
+        return signDigest(digest(payload), signer);
     }
 
     private static String sign(final byte[] payload, final Signer signer) {
-        byte[] messageHash = digest(payload);
-
-        return signDigest(messageHash, signer);
+        return signDigest(digest(payload), signer);
     }
 
-    private static String signDigest(byte[] messageHash, Signer signer) {
-        final byte[] signedPayload = signer.sign(messageHash);
+    private static String signDigest(HashCode messageHash, Signer signer) {
+        final byte[] signedPayload = signer.sign(messageHash.asBytes());
         return Base64.getEncoder().encodeToString(signedPayload);
     }
 
     private static boolean validate(final UUID target, final SignatureValidator validator, final byte[] signature) {
-        return validator.validate(digest(target), signature);
+        return validator.validate(digest(target).asBytes(), signature);
     }
 
     private static boolean validate(final String target, final SignatureValidator validator, final byte[] signature) {
-        return validator.validate(digest(target), signature);
-    }
-
-    private static boolean validate(final byte[] target, final SignatureValidator validator, final byte[] signature) {
-        return validator.validate(digest(target), signature);
+        return validator.validate(digest(target).asBytes(), signature);
     }
 
     @Override
-    public void onClientConnectionCreation(HttpRequest.Builder requestBuilder)
+    public void decorateClientRequest(final HttpRequest.Builder requestBuilder, final boolean authenticated)
     {
-        if (signingHandler == null || sessionId.compareTo(DEFAULT_NILL_UUID) == 0) {
+        if (signingHandler == null || sessionId.equals(DEFAULT_NILL_UUID)) {
             LOGGER.warn("No signing handler is available for the current session (Missing keypair). Stuff might not work since we can not sign the requests!");
             return;
         }
@@ -254,20 +225,27 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
         requestBuilder.header("AuthenticationKeyExpire", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().expiresAt().toString().getBytes(StandardCharsets.UTF_8)));
         requestBuilder.header("AuthenticationKeyExpireDigest", sign(signingHandler.keyPair().publicKeyData().expiresAt().toString(), signingHandler.signer()));
         requestBuilder.header("AuthenticationKeySignature", Base64.getEncoder().encodeToString(signingHandler.keyPair().publicKeyData().publicKeySignature()));
+
+        if (nextChallengeSignature != null && authenticated) {
+            requestBuilder.header("ChallengeSignature", nextChallengeSignature);
+        }
     }
 
     @Override
-    public void onAuthenticateComplete(String challengeString) {
-        this.challengePayload = sign(challengeString, signingHandler.signer());
+    public void handleClientResponse(final java.net.http.HttpResponse<?> response) {
+        final Optional<String> encodedChallenge = response.headers().firstValue("Challenge");
+        if (encodedChallenge.isEmpty()) {
+            return;
+        }
+
+        LOGGER.debug("Got new challenge: {}", encodedChallenge.get());
+
+        final byte[] challenge = Base64.getDecoder().decode(encodedChallenge.get());
+        nextChallengeSignature = sign(challenge, signingHandler.signer());
     }
 
     @Override
-    public void authenticateConnection(HttpRequest.Builder requestBuilder) {
-        requestBuilder.header("ChallengeSignature", this.challengePayload);
-    }
-
-    @Override
-    public boolean onServerConnectionRequest(ChannelHandlerContext ctx, final FullHttpRequest msg)
+    public boolean validateServerRequest(ChannelHandlerContext ctx, final FullHttpRequest msg)
     {
         final var headers = msg.headers();
         final String authentication = headers.get("Authentication");
@@ -382,7 +360,7 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
                 return false;
             }
 
-            challenge = currentChallenges.get(sessionId);
+            challenge = currentChallenges.remove(sessionId);
             if (challenge == null) {
                 LOGGER.warn("External client attempted login with a challenge signature but connection has no challenge: {}", new String(challengeSignature, StandardCharsets.UTF_8));
                 return false;
@@ -438,20 +416,14 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     }
 
     @Override
-    public void onServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, FullHttpResponse resp) {
-        final String challenge = NonceUtils.createNonce();
-
+    public void decorateServerResponse(ChannelHandlerContext ctx, FullHttpRequest msg, HttpResponse resp) {
         final UUID sessionId = getSessionId(msg.headers());
         if (sessionId == null) {
             return;
         }
-
+        final String challenge = NonceUtils.createNonce();
         currentChallenges.put(sessionId, challenge);
         resp.headers().set("Challenge", Base64.getEncoder().encodeToString(challenge.getBytes(StandardCharsets.UTF_8)));
-    }
-
-    @Override
-    public void initialize(SecurityConfig config) {
     }
 
     public record PublicKeyData(PublicKey key, Instant expiresAt, byte[] publicKeySignature) {
@@ -487,14 +459,18 @@ public final class ProfileKeyPairBasedSecurityManager implements IConnectionSecu
     @Nullable
     @Override
     public String getUnavailabilityReason() {
-        if (LaunchEnvironmentHandler.INSTANCE.getDist() == Dist.CLIENT) {
-            final String uuid = LaunchEnvironmentHandler.INSTANCE.getUUID();
-            if (uuid == null || uuid.isEmpty()) {
+        if (FMLEnvironment.dist.isClient()) {
+            if (sessionId.equals(DEFAULT_NILL_UUID)) {
                 // invalid UUID - probably offline mode. not supported
-                LaunchEnvironmentHandler.INSTANCE.addProgressMessage("NO UUID found. Offline mode does not work. No server mods will be downloaded");
+                StartupNotificationManager.locatorConsumer().ifPresent(pm -> pm.accept("NO UUID found. Offline mode does not work. No server mods will be downloaded"));
                 return "There was not a valid UUID present in this client launch. You are probably playing offline mode. Trivially, there is nothing for us to do.";
             }
         }
         return null;
+    }
+
+    @Override
+    public boolean needsAuthRequest() {
+        return true;
     }
 }
